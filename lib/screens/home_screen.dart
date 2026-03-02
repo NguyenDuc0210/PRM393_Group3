@@ -1,5 +1,7 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'login_screen.dart';
 import '../models/location.dart';
 import '../notifiers/location_notifier.dart';
 import '../widgets/CustomWidget.dart';
@@ -19,6 +21,17 @@ class HomeScreen extends ConsumerWidget {
         title: const Text('Locations', style: TextStyle(color: Colors.white)),
         centerTitle: true,
         backgroundColor: Colors.green,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.login, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+              );
+            },
+          ),
+        ],
       ),
       body: locationsAsyncValue.when(
         loading: () => const Center(child: CircularProgressIndicator()),
