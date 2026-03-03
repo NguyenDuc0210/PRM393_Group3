@@ -1,7 +1,10 @@
+
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
 import 'explore_screen.dart';
 import 'settings_screen.dart';
+import 'guides_screen.dart';
+import 'my_plans_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -16,6 +19,8 @@ class _MainScreenState extends State<MainScreen> {
   static const List<Widget> _widgetOptions = <Widget>[
     HomeScreen(),
     ExploreScreen(),
+    GuidesScreen(),
+    MyPlansScreen(),
     SettingsScreen(),
   ];
 
@@ -28,14 +33,15 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: _widgetOptions.elementAt(_selectedIndex),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _widgetOptions,
       ),
       bottomNavigationBar: NavigationBar(
-        backgroundColor: Colors.grey[300],
+        backgroundColor: Colors.white,
         selectedIndex: _selectedIndex,
         onDestinationSelected: _onItemTapped,
-        indicatorColor: Colors.green[300],
+        indicatorColor: const Color(0xFFC8F2C2),
         destinations: const <NavigationDestination>[
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -48,9 +54,19 @@ class _MainScreenState extends State<MainScreen> {
             label: 'Explore',
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
+            icon: Icon(Icons.map_outlined),
+            selectedIcon: Icon(Icons.map),
+            label: 'Guides',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bookmark_outline),
+            selectedIcon: Icon(Icons.bookmark),
+            label: 'My Plans',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profile',
           ),
         ],
       ),

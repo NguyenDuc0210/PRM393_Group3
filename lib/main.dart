@@ -1,7 +1,8 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'notifiers/theme_notifier.dart';
-import 'screens/main_screen.dart';
+import 'screens/splash_screen.dart';
 
 void main() {
   runApp(const ProviderScope(child: MyApp()));
@@ -16,6 +17,7 @@ class MyApp extends ConsumerWidget {
 
     return MaterialApp(
       title: 'Location App',
+      debugShowCheckedModeBanner: false, // Tắt nhãn Debug cho đẹp
       theme: ThemeData(
         brightness: Brightness.light,
         primarySwatch: Colors.blue,
@@ -29,7 +31,7 @@ class MyApp extends ConsumerWidget {
         useMaterial3: true,
       ),
       themeMode: themeMode,
-      home: const MainScreen(),
+      home: const SplashScreen(), // Đổi MainScreen thành SplashScreen
     );
   }
 }
