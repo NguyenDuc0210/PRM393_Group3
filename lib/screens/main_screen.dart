@@ -1,20 +1,15 @@
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../notifiers/navigation_notifier.dart';
 import 'home_screen.dart';
 import 'explore_screen.dart';
 import 'settings_screen.dart';
 import 'guides_screen.dart';
 import 'my_plans_screen.dart';
 
-class MainScreen extends StatefulWidget {
+class MainScreen extends ConsumerWidget {
   const MainScreen({super.key});
-
-  @override
-  State<MainScreen> createState() => _MainScreenState();
-}
-
-class _MainScreenState extends State<MainScreen> {
-  int _selectedIndex = 0;
 
   static const List<Widget> _widgetOptions = <Widget>[
     HomeScreen(),
@@ -24,23 +19,21 @@ class _MainScreenState extends State<MainScreen> {
     SettingsScreen(),
   ];
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedIndex = ref.watch(navigationIndexProvider);
+
     return Scaffold(
       body: IndexedStack(
-        index: _selectedIndex,
+        index: selectedIndex,
         children: _widgetOptions,
       ),
       bottomNavigationBar: NavigationBar(
         backgroundColor: Colors.white,
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: _onItemTapped,
+        selectedIndex: selectedIndex,
+        onDestinationSelected: (index) {
+          ref.read(navigationIndexProvider.notifier).state = index;
+        },
         indicatorColor: const Color(0xFFC8F2C2),
         destinations: const <NavigationDestination>[
           NavigationDestination(
