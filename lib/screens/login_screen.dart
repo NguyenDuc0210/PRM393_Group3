@@ -54,16 +54,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     try {
       String? token;
-      if (type == 'MOCK') {
-        token = await _authRepository.mockLogin(email, password);
-      } else if (type == 'REAL_API') {
-        token = await _authRepository.loginWithRealAPI(email, password);
-      } else if (type == 'FIREBASE') {
+      
+      if (type == 'FIREBASE') {
+        // Đã sửa tên hàm thành loginWithFirebase cho đúng với AuthRepository
         final user = await _authRepository.loginWithFirebase(email, password);
         token = user?.uid;
       } else if (type == 'GOOGLE') {
         final user = await _authRepository.signInWithGoogle();
         token = user?.uid;
+      } else if (type == 'MOCK') {
+        token = await _authRepository.mockLogin(email, password);
+      } else if (type == 'REAL_API') {
+        token = await _authRepository.loginWithRealAPI(email, password);
       }
 
       if (token != null) {
@@ -71,7 +73,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         await prefs.setString('auth_token', token);
 
         if (mounted) {
-          _showStatus('Đăng nhập $type thành công!', Colors.green);
+          _showStatus('Đăng nhập thành công!', Colors.green);
           setState(() => _isLoading = false);
           ref.read(navigationIndexProvider.notifier).state = 0;
           Navigator.pushAndRemoveUntil(
@@ -79,12 +81,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             MaterialPageRoute(builder: (context) => const MainScreen()),
             (route) => false,
           );
-          Future.delayed(const Duration(milliseconds: 500), () {
-            _showNotification();
-          });
+          _showNotification();
         }
       } else {
-        throw 'Không nhận được Token từ máy chủ.';
+        throw 'Đăng nhập thất bại.';
       }
     } catch (e) {
       if (mounted) {
@@ -122,10 +122,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 children: [
                   const Icon(Icons.travel_explore, size: 80, color: Colors.white),
                   const SizedBox(height: 16),
-                  const Text('Travel App Demo', 
+                  const Text('Culture Trip', 
                     style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.2)),
                   const SizedBox(height: 40),
-                  _buildTextField(_emailController, 'Email / Username', Icons.person_outline),
+                  _buildTextField(_emailController, 'Email', Icons.email_outlined),
                   const SizedBox(height: 16),
                   _buildTextField(
                     _passwordController, 
@@ -135,33 +135,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     obscure: _obscurePassword,
                     onToggle: () => setState(() => _obscurePassword = !_obscurePassword)
                   ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ForgotPasswordScreen())),
-                      child: const Text('Quên mật khẩu?', style: TextStyle(color: Colors.white70, fontSize: 14)),
-                    ),
-                  ),
                   const SizedBox(height: 24),
                   if (_isLoading) 
                     const CircularProgressIndicator(color: Colors.white)
                   else ...[
-                    _buildButton('LOGIN FIREBASE', Colors.green, () => _handleLogin('FIREBASE')),
+                    _buildButton('ĐĂNG NHẬP FIREBASE', const Color(0xFFC8F2C2).withOpacity(0.8), () => _handleLogin('FIREBASE')),
                     const SizedBox(height: 12),
-                    _buildButton('GOOGLE SIGN-IN', Colors.blue, () => _handleLogin('GOOGLE')),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Divider(color: Colors.white38),
-                    ),
                     Row(
-                      children: [
-                        Expanded(child: _buildButton('10.1 MOCK', Colors.white24, () => _handleLogin('MOCK'), small: true)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _buildButton('10.1.R API', Colors.white24, () => _handleLogin('REAL_API'), small: true)),
-                      ],
+                       children: [
+                         Expanded(child: _buildButton('GOOGLE', Colors.blue, () => _handleLogin('GOOGLE'), small: true)),
+                         const SizedBox(width: 10),
+                         Expanded(child: _buildButton('MOCK 10.1', Colors.white24, () => _handleLogin('MOCK'), small: true)),
+                       ],
                     ),
-                    const SizedBox(height: 16),
-                    _buildButton('TIẾP TỤC KHÔNG ĐĂNG NHẬP', Colors.orange, () {
+                    const SizedBox(height: 12),
+                    _buildButton('TIẾP TỤC KHÔNG ĐĂNG NHẬP', Colors.white10, () {
                       ref.read(navigationIndexProvider.notifier).state = 0;
                       Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const MainScreen()), (route) => false);
                     }, small: true),
@@ -188,11 +176,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white),
-        prefixIcon: Icon(icon, color: Colors.white),
-        suffixIcon: isPassword ? IconButton(icon: Icon(obscure ? Icons.visibility : Icons.visibility_off, color: Colors.white), onPressed: onToggle) : null,
-        enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white54)),
-        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+        labelStyle: const TextStyle(color: Colors.white70),
+        prefixIcon: Icon(icon, color: Colors.white70),
+        suffixIcon: isPassword ? IconButton(icon: Icon(obscure ? Icons.visibility : Icons.visibility_off, color: Colors.white70), onPressed: onToggle) : null,
+        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white30), borderRadius: BorderRadius.circular(12)),
+        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white), borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor: Colors.white10,
       ),
     );
   }
@@ -203,9 +193,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       style: ElevatedButton.styleFrom(
         minimumSize: Size(double.infinity, small ? 44 : 54),
         backgroundColor: color,
-        foregroundColor: Colors.white,
+        foregroundColor: (color == Colors.white24 || color == Colors.white10) ? Colors.white : Colors.black87,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       child: Text(title, style: TextStyle(fontSize: small ? 13 : 15, fontWeight: FontWeight.bold)),
     );

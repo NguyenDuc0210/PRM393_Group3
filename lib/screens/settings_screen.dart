@@ -16,21 +16,9 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  String? _savedToken;
-
   @override
   void initState() {
     super.initState();
-    _loadToken();
-  }
-
-  Future<void> _loadToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() {
-        _savedToken = prefs.getString('auth_token');
-      });
-    }
   }
 
   Future<void> _handleLogout(BuildContext context) async {
@@ -94,48 +82,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     if (user != null) ...[
                       _buildProfileItem(Icons.email_outlined, 'Email: ${user.email ?? "N/A"}', isEnabled: false),
                       _buildProfileItem(Icons.badge_outlined, 'Name: ${user.displayName ?? "Traveler"}', isEnabled: false),
-
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.blueGrey[50],
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.blueGrey[100]!),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Row(
-                                children: [
-                                  Icon(Icons.vpn_key_outlined, size: 16, color: Colors.blueGrey),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'SESSION TOKEN (Demo 10.3)',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blueGrey),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              SelectableText(
-                                _savedToken ?? 'Chưa có Token (Chưa đăng nhập)',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontFamily: 'monospace',
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
                       
                       const Divider(indent: 24, endIndent: 24),
                       ListTile(
                         leading: const Icon(Icons.logout, color: Colors.red),
                         title: const Text(
-                          'Logout (Clear Session)',
+                          'Logout',
                           style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
                         ),
                         onTap: () => _handleLogout(context),

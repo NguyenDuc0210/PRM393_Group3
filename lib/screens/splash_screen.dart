@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'main_screen.dart';
 import 'login_screen.dart';
 
@@ -19,52 +20,59 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
+    _setupAnimations();
+    _navigateToNext();
+  }
 
+  void _setupAnimations() {
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 2), 
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutCubic,
-    ));
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeIn,
-    ));
-
+    _slideAnimation = Tween<Offset>(begin: const Offset(0, 2), end: Offset.zero).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
+    );
     _controller.forward();
+  }
 
-    // Hẹn giờ để kiểm tra trạng thái đăng nhập và chuyển màn hình
-    Timer(const Duration(milliseconds: 2500), () {
-      if (mounted) {
-        // KIỂM TRA SESSION (AUTO LOGIN)
-        // Nếu đã đăng nhập trước đó, Firebase sẽ trả về user khác null
-        final user = FirebaseAuth.instance.currentUser;
-        
-        // Chọn màn hình tiếp theo dựa trên trạng thái đăng nhập
-        final Widget nextScreen = user != null ? const MainScreen() : const LoginScreen();
+  Future<void> _navigateToNext() async {
+    // 1. Đợi tối thiểu 3 giây để hiệu ứng logo chạy xong và Firebase kịp khôi phục session
+    await Future.delayed(const Duration(milliseconds: 3000));
+    
+    if (!mounted) return;
 
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: const Duration(milliseconds: 500),
-          ),
-        );
-      }
-    });
+    // 2. Kiểm tra SharedPreferences (Dành cho Mock login)
+    final prefs = await SharedPreferences.getInstance();
+    final String? token = prefs.getString('auth_token');
+
+    // 3. Kiểm tra Firebase (Dành cho Firebase/Google login)
+    // Dùng currentUser sau 3s chờ đợi là cách an toàn nhất
+    final User? user = FirebaseAuth.instance.currentUser;
+
+    debugPrint("SPLASH CHECK: Firebase User: ${user?.email}, Token: $token");
+
+    Widget nextScreen;
+    if (user != null || (token != null && token.isNotEmpty)) {
+      nextScreen = const MainScreen();
+    } else {
+      nextScreen = const LoginScreen();
+    }
+
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 600),
+        ),
+      );
+    }
   }
 
   @override
@@ -85,31 +93,13 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Sử dụng ảnh từ assets
-                Image.asset(
-                  'assets/img_5.png', 
-                  width: 120,
+                Image.asset('assets/img_5.png', width: 120,
                   errorBuilder: (context, error, stackTrace) => const Icon(Icons.travel_explore, size: 100, color: Colors.green),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  'culture trip',
-                  style: TextStyle(
-                    fontSize: 36, 
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -1,
-                    color: Color(0xFF0D2D44),
-                  ),
-                ),
+                const Text('culture trip', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w900, color: Color(0xFF0D2D44))),
                 const SizedBox(height: 8),
-                const Text(
-                  'Book Good • Travel Good • Feel Good',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.black54,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                const Text('Book Good • Travel Good • Feel Good', style: TextStyle(fontSize: 14, color: Colors.black54)),
               ],
             ),
           ),
