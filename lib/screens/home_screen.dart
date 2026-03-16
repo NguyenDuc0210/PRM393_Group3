@@ -1,36 +1,79 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../notifiers/navigation_notifier.dart';
 import 'login_screen.dart';
+import 'settings_screen.dart';
 import '../models/location.dart';
 import '../notifiers/location_notifier.dart';
 import '../widgets/CustomWidget.dart';
 import '../widgets/add_edit_location_form.dart';
 import 'location_page.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  String? _authToken;
+  User? _currentUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _authToken = prefs.getString('auth_token');
+      _currentUser = FirebaseAuth.instance.currentUser;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final locationsAsyncValue = ref.watch(locationNotifierProvider);
 
     return Scaffold(
       appBar: AppBar(
         leading: LocationMenuPopup(),
-        title: const Text('Locations', style: TextStyle(color: Colors.white)),
+        title: const Text('Locations', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         centerTitle: true,
         backgroundColor: Colors.green,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.login, color: Colors.white),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-              );
-            },
-          ),
+          if (_authToken != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 12.0),
+              child: GestureDetector(
+                onTap: () {
+                  ref.read(navigationIndexProvider.notifier).state = 4;
+                },
+                child: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: Colors.white,
+                  backgroundImage: _currentUser?.photoURL != null
+                      ? NetworkImage(_currentUser!.photoURL!)
+                      : const NetworkImage('https://cdn-icons-png.flaticon.com/512/3135/3135715.png'),
+                ),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.login, color: Colors.white),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                ).then((_) => _checkLoginStatus());
+              },
+            ),
         ],
       ),
       body: locationsAsyncValue.when(
@@ -38,7 +81,7 @@ class HomeScreen extends ConsumerWidget {
         error: (err, stack) => Center(child: Text('Error: $err')),
         data: (locations) {
           if (locations.isEmpty) {
-            return const Center(child: Text('No locations found for this continent.'));
+            return const Center(child: Text('No locations found.'));
           }
 
           return GridView.builder(
@@ -58,6 +101,7 @@ class HomeScreen extends ConsumerWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.green,
         onPressed: () {
           showDialog(
             context: context,
@@ -69,7 +113,7 @@ class HomeScreen extends ConsumerWidget {
             },
           );
         },
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
@@ -77,7 +121,6 @@ class HomeScreen extends ConsumerWidget {
 
 class LocationCard extends StatelessWidget {
   final Location location;
-
   const LocationCard({super.key, required this.location});
 
   @override
@@ -85,16 +128,12 @@ class LocationCard extends StatelessWidget {
     return Card(
       elevation: 2,
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => LocationPage(locationId: location.id),
-            ),
+            MaterialPageRoute(builder: (context) => LocationPage(locationId: location.id)),
           );
         },
         child: Column(
@@ -105,56 +144,17 @@ class LocationCard extends StatelessWidget {
                 location.imageUrl,
                 width: double.infinity,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Center(
-                    child: Icon(Icons.image_not_supported, size: 40, color: Colors.grey),
-                  );
-                },
+                errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.image_not_supported)),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          location.name,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        location.isStarred ? Icons.star : Icons.star_border,
-                        color: Colors.red,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        location.countStar.toString(),
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
+                  Text(location.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.location_on, size: 14, color: Colors.grey[600]),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          location.address,
-                          style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
+                  Text(location.address, style: const TextStyle(color: Colors.grey, fontSize: 13)),
                 ],
               ),
             ),

@@ -1,201 +1,213 @@
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../repositories/auth_repository.dart';
-import 'forgot_password_screen.dart';
+import '../main.dart'; 
+import '../notifiers/navigation_notifier.dart';
 import 'register_screen.dart';
 import 'main_screen.dart';
+import 'forgot_password_screen.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final AuthRepository _authRepository = AuthRepository();
   bool _isLoading = false;
   bool _obscurePassword = true;
 
-  Future<void> _handleLogin() async {
+  Future<void> _showNotification() async {
+    try {
+      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        'login_id', 'Login channel',
+        importance: Importance.max, priority: Priority.high,
+      );
+      const NotificationDetails details = NotificationDetails(android: androidDetails);
+      await flutterLocalNotificationsPlugin.show(
+        0, 'Đăng nhập thành công', 'Chào mừng bạn đến với Travel App!', details,
+      );
+    } catch (e) {
+      debugPrint('Notification error: $e');
+    }
+  }
+
+  Future<void> _handleLogin(String type) async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) {
-      _showError('Vui lòng nhập Email và Mật khẩu');
+    if (type != 'GOOGLE' && (email.isEmpty || password.isEmpty)) {
+      _showStatus('Vui lòng nhập Email và Mật khẩu', Colors.orange);
       return;
     }
 
-    if (password.length < 6) {
-      _showError('Mật khẩu phải có ít nhất 6 ký tự');
-      return;
-    }
-
-    // Ẩn bàn phím trước khi xử lý
     FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
+    _showStatus('Đang kết nối hệ thống ($type)...', Colors.blue);
 
     try {
-      final user = await _authRepository.loginWithEmail(email, password);
-      if (user != null) {
+      String? token;
+      if (type == 'MOCK') {
+        token = await _authRepository.mockLogin(email, password);
+      } else if (type == 'REAL_API') {
+        token = await _authRepository.loginWithRealAPI(email, password);
+      } else if (type == 'FIREBASE') {
+        final user = await _authRepository.loginWithFirebase(email, password);
+        token = user?.uid;
+      } else if (type == 'GOOGLE') {
+        final user = await _authRepository.signInWithGoogle();
+        token = user?.uid;
+      }
+
+      if (token != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('auth_token', token);
+
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đăng nhập thành công!'), backgroundColor: Colors.green),
-          );
+          _showStatus('Đăng nhập $type thành công!', Colors.green);
+          setState(() => _isLoading = false);
+          ref.read(navigationIndexProvider.notifier).state = 0;
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (context) => const MainScreen()),
             (route) => false,
           );
+          Future.delayed(const Duration(milliseconds: 500), () {
+            _showNotification();
+          });
         }
+      } else {
+        throw 'Không nhận được Token từ máy chủ.';
       }
     } catch (e) {
-      _showError(e.toString().replaceAll('Exception: ', ''));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showStatus('Lỗi: ${e.toString().replaceAll('Exception: ', '')}', Colors.red);
+      }
     }
   }
 
-  void _showError(String message) {
+  void _showStatus(String message, Color color) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
+      SnackBar(content: Text(message), backgroundColor: color, duration: const Duration(seconds: 3)),
     );
-  }
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: CircleAvatar(
-            backgroundColor: Colors.black.withOpacity(0.3),
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.pop(context), // Dùng pop để quay lại màn trước đó cho nhẹ
-            ),
+      body: Container(
+        width: double.infinity, height: double.infinity,
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/img_6.png'),
+            fit: BoxFit.cover,
           ),
         ),
-      ),
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
         child: Container(
-          width: double.infinity,
-          height: double.infinity,
-          decoration: const BoxDecoration(
-            image: DecorationImage(
-              image: NetworkImage('https://i.pinimg.com/originals/0a/ee/68/0aee68e5e233cad0c948e3789d08f085.jpg'),
-              fit: BoxFit.cover,
-            ),
-          ),
-          child: Container(
-            color: Colors.black.withOpacity(0.4),
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24.0),
-                child: Card(
-                  elevation: 12,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.travel_explore, size: 80, color: Colors.green),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Chào mừng trở lại!',
-                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text('Đăng nhập để tiếp tục hành trình', style: TextStyle(color: Colors.grey)),
-                        const SizedBox(height: 32),
-                        TextFormField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: InputDecoration(
-                            labelText: 'Email',
-                            prefixIcon: const Icon(Icons.email_outlined),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          decoration: InputDecoration(
-                            labelText: 'Mật khẩu',
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            suffixIcon: IconButton(
-                              icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                            ),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
-                              );
-                            },
-                            child: const Text('Quên mật khẩu?', style: TextStyle(color: Colors.green)),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        _isLoading
-                            ? const CircularProgressIndicator(color: Colors.green)
-                            : ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  minimumSize: const Size(double.infinity, 56),
-                                  backgroundColor: Colors.green,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  elevation: 4,
-                                ),
-                                onPressed: _handleLogin,
-                                child: const Text('ĐĂNG NHẬP', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                              ),
-                        const SizedBox(height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text('Chưa có tài khoản?'),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (context) => const RegisterScreen()),
-                                );
-                              },
-                              child: const Text('Đăng ký ngay', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                      ],
+          color: Colors.black.withOpacity(0.5),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.travel_explore, size: 80, color: Colors.white),
+                  const SizedBox(height: 16),
+                  const Text('Travel App Demo', 
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.2)),
+                  const SizedBox(height: 40),
+                  _buildTextField(_emailController, 'Email / Username', Icons.person_outline),
+                  const SizedBox(height: 16),
+                  _buildTextField(
+                    _passwordController, 
+                    'Mật khẩu', 
+                    Icons.lock_outline,
+                    isPassword: true,
+                    obscure: _obscurePassword,
+                    onToggle: () => setState(() => _obscurePassword = !_obscurePassword)
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ForgotPasswordScreen())),
+                      child: const Text('Quên mật khẩu?', style: TextStyle(color: Colors.white70, fontSize: 14)),
                     ),
                   ),
-                ),
+                  const SizedBox(height: 24),
+                  if (_isLoading) 
+                    const CircularProgressIndicator(color: Colors.white)
+                  else ...[
+                    _buildButton('LOGIN FIREBASE', Colors.green, () => _handleLogin('FIREBASE')),
+                    const SizedBox(height: 12),
+                    _buildButton('GOOGLE SIGN-IN', Colors.blue, () => _handleLogin('GOOGLE')),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Divider(color: Colors.white38),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(child: _buildButton('10.1 MOCK', Colors.white24, () => _handleLogin('MOCK'), small: true)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildButton('10.1.R API', Colors.white24, () => _handleLogin('REAL_API'), small: true)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildButton('TIẾP TỤC KHÔNG ĐĂNG NHẬP', Colors.orange, () {
+                      ref.read(navigationIndexProvider.notifier).state = 0;
+                      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const MainScreen()), (route) => false);
+                    }, small: true),
+                  ],
+                  const SizedBox(height: 32),
+                  TextButton(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RegisterScreen())),
+                    child: const Text('Chưa có tài khoản? Đăng ký ngay', 
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  )
+                ],
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String label, IconData icon, {bool isPassword = false, bool obscure = false, VoidCallback? onToggle}) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white),
+        prefixIcon: Icon(icon, color: Colors.white),
+        suffixIcon: isPassword ? IconButton(icon: Icon(obscure ? Icons.visibility : Icons.visibility_off, color: Colors.white), onPressed: onToggle) : null,
+        enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white54)),
+        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+      ),
+    );
+  }
+
+  Widget _buildButton(String title, Color color, VoidCallback onPressed, {bool small = false}) {
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        minimumSize: Size(double.infinity, small ? 44 : 54),
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+      ),
+      child: Text(title, style: TextStyle(fontSize: small ? 13 : 15, fontWeight: FontWeight.bold)),
     );
   }
 }
