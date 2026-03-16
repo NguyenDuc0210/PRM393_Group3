@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 
@@ -9,11 +10,14 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Theo dõi trạng thái đăng nhập để hiển thị header phù hợp
+    final User? user = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       backgroundColor: const Color(0xFFC8F2C2),
       body: Column(
         children: [
-          _buildHeader(context),
+          _buildHeader(context, user),
           Expanded(
             child: Container(
               width: double.infinity,
@@ -42,7 +46,7 @@ class SettingsScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    _buildProfileItem(Icons.person_outline, 'Account', isEnabled: false),
+                    _buildProfileItem(Icons.person_outline, 'Account', isEnabled: user != null),
                     _buildProfileItem(Icons.settings_outlined, 'Settings', isEnabled: true),
                     const Divider(indent: 60),
                     _buildProfileItem(Icons.file_download_outlined, 'Downloaded Articles', isEnabled: false),
@@ -50,8 +54,36 @@ class SettingsScreen extends ConsumerWidget {
                     _buildProfileItem(Icons.star_outline, 'Rate Our App', isEnabled: true),
                     _buildProfileItem(Icons.chat_bubble_outline, 'Send Us Feedback', isEnabled: true),
                     _buildProfileItem(Icons.lock_outline, 'Privacy & Legal', isEnabled: true),
+                    
+                    if (user != null) ...[
+                      const SizedBox(height: 20),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            await FirebaseAuth.instance.signOut();
+                            if (context.mounted) {
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(builder: (context) => const LoginScreen()),
+                                (route) => false,
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.logout),
+                          label: const Text('Log Out'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red[50],
+                            foregroundColor: Colors.red,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                    ],
+                    
                     const SizedBox(height: 30),
-                    _buildFooter(context),
+                    if (user == null) _buildFooter(context),
                     const SizedBox(height: 50),
                   ],
                 ),
@@ -63,7 +95,7 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, User? user) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 60, 24, 30),
       child: Column(
@@ -74,66 +106,70 @@ class SettingsScreen extends ConsumerWidget {
               const CircleAvatar(
                 radius: 50,
                 backgroundColor: Colors.white,
-                backgroundImage: AssetImage('assets/img_5.png'), // Sử dụng ảnh từ assets
+                backgroundImage: AssetImage('assets/img_5.png'),
               ),
               const SizedBox(width: 20),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Text(
-                      'Welcome to The Culture Trip!',
-                      style: TextStyle(
+                      user != null ? 'Hello, ${user.email}!' : 'Welcome to The Culture Trip!',
+                      style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF0D2D44),
                       ),
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     Text(
-                      'Log in to unlock the ability to create travel plans, explore local guide articles, and so much more!',
-                      style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.4),
+                      user != null 
+                        ? 'Great to have you back. Ready for your next adventure?' 
+                        : 'Log in to unlock the ability to create travel plans, explore local guide articles, and so much more!',
+                      style: const TextStyle(fontSize: 13, color: Colors.black87, height: 1.4),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0D2D44),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          if (user == null) ...[
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D2D44),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text('Log In', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
-                  child: const Text('Log In', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const RegisterScreen()));
-                  },
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFF0D2D44)),
-                    foregroundColor: const Color(0xFF0D2D44),
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    backgroundColor: Colors.white,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const RegisterScreen()));
+                    },
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF0D2D44)),
+                      foregroundColor: const Color(0xFF0D2D44),
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      backgroundColor: Colors.white,
+                    ),
+                    child: const Text('Sign Up', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
-                  child: const Text('Sign Up', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -165,7 +201,7 @@ class SettingsScreen extends ConsumerWidget {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
             children: [
               GestureDetector(
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen())),
@@ -182,10 +218,9 @@ class SettingsScreen extends ConsumerWidget {
                   style: TextStyle(decoration: TextDecoration.underline, fontWeight: FontWeight.bold),
                 ),
               ),
-              const Text(' to save plans, access local'),
+              const Text(' to save plans, access local guides, and more!'),
             ],
           ),
-          const Text('guides, and more!'),
         ],
       ),
     );

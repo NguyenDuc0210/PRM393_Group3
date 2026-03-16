@@ -1,7 +1,8 @@
-
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'main_screen.dart';
+import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -42,12 +43,20 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
 
+    // Hẹn giờ để kiểm tra trạng thái đăng nhập và chuyển màn hình
     Timer(const Duration(milliseconds: 2500), () {
       if (mounted) {
+        // KIỂM TRA SESSION (AUTO LOGIN)
+        // Nếu đã đăng nhập trước đó, Firebase sẽ trả về user khác null
+        final user = FirebaseAuth.instance.currentUser;
+        
+        // Chọn màn hình tiếp theo dựa trên trạng thái đăng nhập
+        final Widget nextScreen = user != null ? const MainScreen() : const LoginScreen();
+
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => const MainScreen(),
+            pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);
             },
