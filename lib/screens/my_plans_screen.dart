@@ -1,20 +1,22 @@
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../repositories/plan_repository.dart';
+import '../notifiers/plan_notifier.dart';
+import 'plan_detail_screen.dart';
 
-class MyPlansScreen extends StatefulWidget {
+class MyPlansScreen extends ConsumerStatefulWidget {
   const MyPlansScreen({super.key});
 
   @override
-  State<MyPlansScreen> createState() => _MyPlansScreenState();
+  ConsumerState<MyPlansScreen> createState() => _MyPlansScreenState();
 }
 
-class _MyPlansScreenState extends State<MyPlansScreen> {
-  final PlanRepository _repository = PlanRepository();
+class _MyPlansScreenState extends ConsumerState<MyPlansScreen> {
   bool _isEditing = false;
   final TextEditingController _planNameController = TextEditingController();
 
-  void _showDeleteConfirmation(String id, String name) {
+  void _showDeleteConfirmation(int id, String name) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -27,12 +29,14 @@ class _MyPlansScreenState extends State<MyPlansScreen> {
             child: const Text('Cancel', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              _repository.deletePlan(id);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Plan removed.'), backgroundColor: Color(0xFF0D2D44)),
-              );
+              await ref.read(planNotifierProvider.notifier).deletePlan(id);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Plan removed.'), backgroundColor: Color(0xFF0D2D44)),
+                );
+              }
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
           ),
@@ -41,7 +45,13 @@ class _MyPlansScreenState extends State<MyPlansScreen> {
     );
   }
 
-  void _showCreatePlanDialog() {
+  void _showCreateOrEditPlanDialog({MyPlanModel? plan}) {
+    if (plan != null) {
+      _planNameController.text = plan.name;
+    } else {
+      _planNameController.clear();
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -57,7 +67,8 @@ class _MyPlansScreenState extends State<MyPlansScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Create New Plan', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(plan == null ? 'Create New Plan' : 'Edit Plan Name', 
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const Divider(),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -72,11 +83,16 @@ class _MyPlansScreenState extends State<MyPlansScreen> {
               ),
               const Divider(),
               InkWell(
-                onTap: () {
-                  if (_planNameController.text.trim().isNotEmpty) {
-                    _repository.addPlan(_planNameController.text.trim());
+                onTap: () async {
+                  final name = _planNameController.text.trim();
+                  if (name.isNotEmpty) {
+                    if (plan == null) {
+                      await ref.read(planNotifierProvider.notifier).addPlan(name);
+                    } else {
+                      await ref.read(planNotifierProvider.notifier).updatePlanName(plan.id, name);
+                    }
                     _planNameController.clear();
-                    Navigator.pop(context);
+                    if (mounted) Navigator.pop(context);
                   }
                 },
                 child: Container(
@@ -96,42 +112,37 @@ class _MyPlansScreenState extends State<MyPlansScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final plansAsync = ref.watch(planNotifierProvider);
+
     return Scaffold(
       backgroundColor: const Color(0xFFC8F2C2),
-      body: StreamBuilder<List<MyPlanModel>>(
-        stream: _repository.getPlans(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final plans = snapshot.data ?? [];
-
-          return Column(
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF8F9FA),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-                  ),
-                  child: Column(
-                    children: [
-                      _buildSubHeader(plans),
-                      Expanded(
-                        child: plans.isEmpty
-                            ? _buildEmptyState()
-                            : _buildPlansList(plans),
-                      ),
-                    ],
-                  ),
+      body: plansAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) => Center(child: Text('Error: $err')),
+        data: (plans) => Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF8F9FA),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+                ),
+                child: Column(
+                  children: [
+                    _buildSubHeader(plans),
+                    Expanded(
+                      child: plans.isEmpty
+                          ? _buildEmptyState()
+                          : _buildPlansList(plans),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          );
-        }
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -190,7 +201,7 @@ class _MyPlansScreenState extends State<MyPlansScreen> {
         ),
         const SizedBox(height: 20),
         ElevatedButton(
-          onPressed: _showCreatePlanDialog,
+          onPressed: () => _showCreateOrEditPlanDialog(),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF0D2D44),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -205,7 +216,6 @@ class _MyPlansScreenState extends State<MyPlansScreen> {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       children: [
-        // Nút thêm mới luôn ở trên cùng
         Container(
           margin: const EdgeInsets.only(bottom: 20),
           decoration: BoxDecoration(
@@ -213,7 +223,7 @@ class _MyPlansScreenState extends State<MyPlansScreen> {
             borderRadius: BorderRadius.circular(16),
           ),
           child: ListTile(
-            onTap: _showCreatePlanDialog,
+            onTap: () => _showCreateOrEditPlanDialog(),
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             title: const Text('Create New Plan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             trailing: const CircleAvatar(
@@ -231,6 +241,14 @@ class _MyPlansScreenState extends State<MyPlansScreen> {
             side: BorderSide(color: Colors.grey.shade200),
           ),
           child: ListTile(
+            onTap: () async {
+              if (!_isEditing) {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => PlanDetailScreen(plan: plan)),
+                );
+              }
+            },
             contentPadding: const EdgeInsets.fromLTRB(20, 30, 20, 10),
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -241,9 +259,18 @@ class _MyPlansScreenState extends State<MyPlansScreen> {
               ],
             ),
             trailing: _isEditing
-              ? IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () => _showDeleteConfirmation(plan.id, plan.name)
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                      onPressed: () => _showCreateOrEditPlanDialog(plan: plan),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      onPressed: () => _showDeleteConfirmation(plan.id, plan.name)
+                    ),
+                  ],
                 )
               : const CircleAvatar(
                   backgroundColor: Color(0xFFF1F3F4),

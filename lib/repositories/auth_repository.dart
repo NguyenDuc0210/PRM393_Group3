@@ -2,50 +2,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'dart:async';
-import 'package:flutter/foundation.dart';
 
 class AuthRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-
-  Future<String?> mockLogin(String email, String password) async {
-    await Future.delayed(const Duration(seconds: 2));
-    if (email == 'admin@gmail.com' && password == '123456') {
-      return "fake-jwt-token-12345";
-    } else {
-      throw Exception('Sai email hoặc mật khẩu demo');
-    }
-  }
-
-  Future<String?> loginWithRealAPI(String username, String password) async {
-    try {
-      final response = await http.post(
-        Uri.parse('https://dummyjson.com/auth/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'username': username, 'password': password}),
-      ).timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        if (kDebugMode) {
-          print('SERVER RESPONSE: $data');
-        }
-
-        return data['accessToken'] ?? data['token'];
-      } else {
-        final errorData = jsonDecode(response.body);
-        throw Exception(errorData['message'] ?? 'Sai tài khoản hoặc mật khẩu API');
-      }
-    } on TimeoutException catch (_) {
-      throw Exception('Kết nối mạng quá chậm');
-    } catch (e) {
-      throw Exception('Lỗi kết nối API: $e');
-    }
-  }
 
   Future<User?> signInWithGoogle() async {
     try {

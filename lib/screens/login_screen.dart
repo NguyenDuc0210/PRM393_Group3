@@ -43,7 +43,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (type != 'GOOGLE' && (email.isEmpty || password.isEmpty)) {
+    if (type == 'FIREBASE' && (email.isEmpty || password.isEmpty)) {
       _showStatus('Vui lòng nhập Email và Mật khẩu', Colors.orange);
       return;
     }
@@ -56,16 +56,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       String? token;
       
       if (type == 'FIREBASE') {
-        // Đã sửa tên hàm thành loginWithFirebase cho đúng với AuthRepository
         final user = await _authRepository.loginWithFirebase(email, password);
         token = user?.uid;
       } else if (type == 'GOOGLE') {
         final user = await _authRepository.signInWithGoogle();
         token = user?.uid;
-      } else if (type == 'MOCK') {
-        token = await _authRepository.mockLogin(email, password);
-      } else if (type == 'REAL_API') {
-        token = await _authRepository.loginWithRealAPI(email, password);
       }
 
       if (token != null) {
@@ -84,7 +79,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _showNotification();
         }
       } else {
-        throw 'Đăng nhập thất bại.';
+        setState(() => _isLoading = false);
       }
     } catch (e) {
       if (mounted) {
@@ -139,15 +134,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   if (_isLoading) 
                     const CircularProgressIndicator(color: Colors.white)
                   else ...[
-                    _buildButton('ĐĂNG NHẬP FIREBASE', const Color(0xFFC8F2C2).withOpacity(0.8), () => _handleLogin('FIREBASE')),
+                    _buildButton('ĐĂNG NHẬP', const Color(0xFF579D58), () => _handleLogin('FIREBASE')),
                     const SizedBox(height: 12),
-                    Row(
-                       children: [
-                         Expanded(child: _buildButton('GOOGLE', Colors.blue, () => _handleLogin('GOOGLE'), small: true)),
-                         const SizedBox(width: 10),
-                         Expanded(child: _buildButton('MOCK 10.1', Colors.white24, () => _handleLogin('MOCK'), small: true)),
-                       ],
-                    ),
+                    _buildButton('TIẾP TỤC VỚI GOOGLE', Colors.white, () => _handleLogin('GOOGLE'), small: true),
                     const SizedBox(height: 12),
                     _buildButton('TIẾP TỤC KHÔNG ĐĂNG NHẬP', Colors.white10, () {
                       ref.read(navigationIndexProvider.notifier).state = 0;
@@ -159,6 +148,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RegisterScreen())),
                     child: const Text('Chưa có tài khoản? Đăng ký ngay', 
                       style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ForgotPasswordScreen())),
+                    child: const Text('Quên mật khẩu?', 
+                      style: TextStyle(color: Colors.white70, fontSize: 14)),
                   )
                 ],
               ),
@@ -193,7 +187,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       style: ElevatedButton.styleFrom(
         minimumSize: Size(double.infinity, small ? 44 : 54),
         backgroundColor: color,
-        foregroundColor: (color == Colors.white24 || color == Colors.white10) ? Colors.white : Colors.black87,
+        foregroundColor: (color == Colors.white24 || color == Colors.white10 || color == Colors.white) ? (color == Colors.white ? Colors.black87 : Colors.white) : Colors.white,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),

@@ -6,6 +6,7 @@ import 'home_screen.dart';
 import 'explore_screen.dart';
 import 'settings_screen.dart';
 import 'guides_screen.dart';
+import 'tours_screen.dart';
 import 'my_plans_screen.dart';
 
 class MainScreen extends ConsumerWidget {
@@ -15,6 +16,7 @@ class MainScreen extends ConsumerWidget {
     HomeScreen(),
     ExploreScreen(),
     GuidesScreen(),
+    ToursScreen(),
     MyPlansScreen(),
     SettingsScreen(),
   ];
@@ -50,6 +52,11 @@ class MainScreen extends ConsumerWidget {
             icon: Icon(Icons.map_outlined),
             selectedIcon: Icon(Icons.map),
             label: 'Guides',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month),
+            label: 'Tours',
           ),
           NavigationDestination(
             icon: Icon(Icons.bookmark_outline),

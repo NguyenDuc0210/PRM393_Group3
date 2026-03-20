@@ -4,21 +4,19 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
-import 'screens/splash_screen.dart'; // Import SplashScreen xịn từ folder screens
+import 'screens/splash_screen.dart';
+import 'notifiers/settings_notifier.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 void main() async {
-  // 1. Đảm bảo Flutter đã sẵn sàng
   WidgetsFlutterBinding.ensureInitialized();
   
-  // 2. Khởi tạo Firebase ngay tại đây để app chạy ổn định
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
     
-    // Khởi tạo thông báo
     const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
     const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
     await flutterLocalNotificationsPlugin.initialize(initializationSettings);
@@ -26,7 +24,6 @@ void main() async {
     debugPrint('Firebase/Notification Init Error: $e');
   }
 
-  // 3. Chạy App
   runApp(
     const ProviderScope(
       child: MyApp(),
@@ -34,19 +31,30 @@ void main() async {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+
     return MaterialApp(
       title: 'Travel App',
       debugShowCheckedModeBanner: false,
+      themeMode: settings.themeMode,
       theme: ThemeData(
         primarySwatch: Colors.green,
         useMaterial3: true,
+        brightness: Brightness.light,
       ),
-      // Dùng SplashScreen xịn để xử lý logic Auto Login
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        useMaterial3: true,
+        primarySwatch: Colors.green,
+      ),
+      locale: settings.locale,
+      // Lưu ý: Để thực sự đổi ngôn ngữ hiển thị text trong app, 
+      // bạn cần thiết lập Localization. Ở đây tôi đang làm khung sườn đổi Locale.
       home: const SplashScreen(), 
     );
   }

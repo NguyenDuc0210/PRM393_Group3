@@ -1,31 +1,25 @@
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/location.dart';
+import 'database_helper.dart';
 
 class LocationRepository {
-  final List<Location> _locations = List.from(Location.sampleLocations);
-  int _nextId = 11;
+  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
   Future<List<Location>> fetchLocations() async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    return List.from(_locations);
+    return await _dbHelper.getAllLocations();
   }
 
   Future<void> addLocation(Location location) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    _locations.add(location.copyWith(id: _nextId++));
+    await _dbHelper.insertLocation(location);
   }
 
   Future<void> updateLocation(Location location) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    final index = _locations.indexWhere((loc) => loc.id == location.id);
-    if (index != -1) {
-      _locations[index] = location;
-    }
+    await _dbHelper.updateLocation(location);
   }
 
   Future<void> deleteLocation(int locationId) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    _locations.removeWhere((loc) => loc.id == locationId);
+    await _dbHelper.deleteLocation(locationId);
   }
 }
 
