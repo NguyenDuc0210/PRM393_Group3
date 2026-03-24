@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/CategoryLocation.dart';
@@ -22,6 +23,18 @@ class _AddEditLocationFormState extends ConsumerState<AddEditLocationForm> {
   final _imageUrlController = TextEditingController(text: 'assets/img.png');
   String? _selectedContinent;
 
+  static const List<MapEntry<String, String>> _locationTypes = [
+    MapEntry('City', 'city'),
+    MapEntry('Food & Drink', 'food'),
+    MapEntry('Things To Do', 'things_to_do'),
+    MapEntry('Places to Stay', 'places_to_stay'),
+    MapEntry('Guides & Tips', 'guides_tips'),
+    MapEntry('Culture', 'culture'),
+    MapEntry('Inspiration', 'inspiration'),
+  ];
+
+  String _selectedType = 'city';
+
   bool get _isEditMode => widget.locationId != null;
 
   @override
@@ -42,6 +55,10 @@ class _AddEditLocationFormState extends ConsumerState<AddEditLocationForm> {
         _descriptionController.text = location.description;
         _imageUrlController.text = location.imageUrl;
         _selectedContinent = location.continent;
+        final t = location.type;
+        if (t != null && _locationTypes.any((e) => e.value == t)) {
+          _selectedType = t;
+        }
       });
     } catch (e) {
     }
@@ -70,11 +87,11 @@ class _AddEditLocationFormState extends ConsumerState<AddEditLocationForm> {
     final locationData = await ref.read(locationRepositoryProvider).fetchLocations();
     Location? existingLocation;
     if(_isEditMode) {
-        try {
-            existingLocation = locationData.firstWhere((loc) => loc.id == widget.locationId);
-        } catch(e) {
-            existingLocation = null;
-        }
+      try {
+        existingLocation = locationData.firstWhere((loc) => loc.id == widget.locationId);
+      } catch(e) {
+        existingLocation = null;
+      }
     }
 
     final location = Location(
@@ -86,6 +103,7 @@ class _AddEditLocationFormState extends ConsumerState<AddEditLocationForm> {
       continent: _selectedContinent!,
       countStar: existingLocation?.countStar ?? 0,
       isStarred: existingLocation?.isStarred ?? false,
+      type: _selectedType,
     );
 
     final notifier = ref.read(locationNotifierProvider.notifier);
@@ -118,6 +136,29 @@ class _AddEditLocationFormState extends ConsumerState<AddEditLocationForm> {
             Text('Continent', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             _buildContinentSelector(),
+            const SizedBox(height: 16),
+            Text('Category', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              value: _selectedType,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: Colors.black.withOpacity(0.05),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+              items: _locationTypes
+                  .map(
+                    (e) => DropdownMenuItem<String>(
+                  value: e.value,
+                  child: Text(e.key),
+                ),
+              )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _selectedType = v);
+              },
+            ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,

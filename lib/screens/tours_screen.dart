@@ -1,46 +1,56 @@
 
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/tour_data.dart';
 import '../models/location.dart';
+import '../models/user_role.dart';
 import '../notifiers/plan_notifier.dart';
 import '../notifiers/navigation_notifier.dart';
+import '../notifiers/tour_notifier.dart';
+import '../notifiers/auth_notifier.dart';
+import '../repositories/auth_repository.dart';
 import '../repositories/database_helper.dart';
 import 'tour_detail_screen.dart';
+import 'add_edit_tour_screen.dart';
+import 'login_screen.dart';
 
-// Tạo một provider để load dữ liệu tour
-final toursProvider = FutureProvider<Map<String, List<TourData>>>((ref) async {
-  final db = DatabaseHelper.instance;
-  return {
-    'Europe': await db.getToursByContinent('Europe'),
-    'Asia': await db.getToursByContinent('Asia'),
-    'Africa': await db.getToursByContinent('Africa'),
-    'South America': await db.getToursByContinent('South America'),
-    'Australia': await db.getToursByContinent('Australia'),
-  };
-});
-
-class ToursScreen extends ConsumerWidget {
+class ToursScreen extends ConsumerStatefulWidget {
   const ToursScreen({super.key});
+
+  @override
+  ConsumerState<ToursScreen> createState() => _ToursScreenState();
+}
+
+class _ToursScreenState extends ConsumerState<ToursScreen> {
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _selectedContinent = 'All';
 
   Location _getTourAsLocation(TourData tour) {
     return Location(
-      id: tour.id!,
+      id: tour.id ?? 0,
       name: tour.name,
       address: tour.provider,
       description: tour.overview,
       countStar: 0,
-      imageUrl: tour.images.isNotEmpty ? tour.images[0] : 'assets/img.png',
+      imageUrl: tour.mainImageUrl,
       continent: tour.continent.toLowerCase(),
       type: 'tour',
     );
   }
 
-  void _showAddToPlanBottomSheet(BuildContext context, WidgetRef ref, TourData tour) async {
+  void _showAddToPlanBottomSheet(TourData tour) async {
+    final userRole = ref.read(authNotifierProvider);
+    if (userRole == UserRole.guest) {
+      _showLoginRequiredDialog();
+      return;
+    }
+
     final location = _getTourAsLocation(tour);
     final plans = await ref.read(planNotifierProvider.future);
-    
-    if (!context.mounted) return;
+
+    if (!mounted) return;
 
     showModalBottomSheet(
       context: context,
@@ -65,7 +75,7 @@ class ToursScreen extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 children: [
                   GestureDetector(
-                    onTap: () => _showCreatePlanDialog(context, ref, location),
+                    onTap: () => _showCreatePlanDialog(location),
                     child: Column(
                       children: [
                         Container(
@@ -85,7 +95,7 @@ class ToursScreen extends ConsumerWidget {
                       onTap: () async {
                         await DatabaseHelper.instance.insertLocation(location);
                         final success = await ref.read(planNotifierProvider.notifier).addLocationToPlan(plan.id, location.id);
-                        if (!context.mounted) return;
+                        if (!mounted) return;
                         Navigator.pop(context);
                         if (success) {
                           ref.read(navigationIndexProvider.notifier).state = 4;
@@ -117,7 +127,27 @@ class ToursScreen extends ConsumerWidget {
     );
   }
 
-  void _showCreatePlanDialog(BuildContext context, WidgetRef ref, Location location) {
+  void _showLoginRequiredDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Đăng nhập bắt buộc'),
+        content: const Text('Bạn cần đăng nhập để thêm tour vào kế hoạch.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+            }, 
+            child: const Text('Đăng nhập')
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCreatePlanDialog(Location location) {
     final controller = TextEditingController();
     Navigator.pop(context);
     showModalBottomSheet(
@@ -152,11 +182,11 @@ class ToursScreen extends ConsumerWidget {
                     await ref.read(planNotifierProvider.notifier).addPlan(controller.text.trim());
                     final plans = await ref.read(planNotifierProvider.future);
                     final newPlan = plans.first;
-                    
+
                     await DatabaseHelper.instance.insertLocation(location);
                     await ref.read(planNotifierProvider.notifier).addLocationToPlan(newPlan.id, location.id);
-                    
-                    if (context.mounted) {
+
+                    if (mounted) {
                       Navigator.pop(context);
                       ref.read(navigationIndexProvider.notifier).state = 4;
                     }
@@ -177,92 +207,185 @@ class ToursScreen extends ConsumerWidget {
     );
   }
 
+  void _showAddTourDialog() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AddEditTourScreen()),
+    );
+  }
+
+  void _showFilterBottomSheet(List<String> continents) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Filter by Continent', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 10,
+              children: [
+                FilterChip(
+                  label: const Text('All'),
+                  selected: _selectedContinent == 'All',
+                  onSelected: (selected) {
+                    setState(() => _selectedContinent = 'All');
+                    Navigator.pop(context);
+                  },
+                ),
+                ...continents.map((c) => FilterChip(
+                  label: Text(c),
+                  selected: _selectedContinent == c,
+                  onSelected: (selected) {
+                    setState(() => _selectedContinent = c);
+                    Navigator.pop(context);
+                  },
+                )),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final toursAsync = ref.watch(toursProvider);
+  Widget build(BuildContext context) {
+    final toursAsync = ref.watch(tourNotifierProvider);
+    final userRole = ref.watch(authNotifierProvider);
 
     return Scaffold(
       backgroundColor: Colors.white,
+      appBar: _isSearching
+          ? AppBar(
+        backgroundColor: const Color(0xFFC8F2C2),
+        title: TextField(
+          controller: _searchController,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Search tours...', border: InputBorder.none),
+          onChanged: (val) {
+            ref.read(tourNotifierProvider.notifier).searchTours(val);
+          },
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () {
+              setState(() => _isSearching = false);
+              _searchController.clear();
+              ref.read(tourNotifierProvider.notifier).loadTours();
+            },
+          )
+        ],
+      )
+          : null,
+      floatingActionButton: userRole == UserRole.admin 
+        ? FloatingActionButton.extended(
+            heroTag: 'tours_fab',
+            onPressed: _showAddTourDialog,
+            backgroundColor: const Color(0xFF0D2D44),
+            icon: const Icon(Icons.add, size: 28, color: Colors.white),
+            label: const Text('Add Tour', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          )
+        : null,
       body: toursAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Error: $err')),
-        data: (toursMap) => CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
-                decoration: const BoxDecoration(color: Color(0xFFC8F2C2)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Your Next Adventure\nIs Here',
-                      style: TextStyle(
-                        fontSize: 34,
-                        fontWeight: FontWeight.bold,
-                        height: 1.1,
-                        color: Color(0xFF0D2D44),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      "Find your perfect getaway with trips from top providers, now on The Culture Trip Marketplace.",
-                      style: TextStyle(fontSize: 16, color: Color(0xFF0D2D44)),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+        data: (tours) {
+          final allContinents = tours.map((e) => e.continent).toSet().toList();
+          final filteredTours = _selectedContinent == 'All'
+              ? tours
+              : tours.where((t) => t.continent == _selectedContinent).toList();
+          final continentsToShow = _selectedContinent == 'All'
+              ? allContinents
+              : [_selectedContinent];
+
+          return CustomScrollView(
+            slivers: [
+              if (!_isSearching)
+                SliverToBoxAdapter(
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
+                    decoration: const BoxDecoration(color: Color(0xFFC8F2C2)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Image.asset('assets/img_6.png', height: 120, width: 200, fit: BoxFit.contain),
+                        const Text(
+                          'Your Next Adventure\nIs Here',
+                          style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, height: 1.1, color: Color(0xFF0D2D44)),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          "Find your perfect getaway with trips from top providers, giờ đây đã có trên thị trường.",
+                          style: TextStyle(fontSize: 16, color: Color(0xFF0D2D44)),
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Image.asset('assets/img_6.png', height: 120, width: 200, fit: BoxFit.contain),
+                          ],
+                        ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-
-            SliverList(
-              delegate: SliverChildListDelegate([
-                Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0D2D44),
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 56),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text('Discover All Trip Offers', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                 ),
 
-                if (toursMap['Europe']!.isNotEmpty) ...[
-                  _buildSectionTitle('Travel In Europe 2026'),
-                  _buildToursList(context, ref, toursMap['Europe']!),
-                ],
-                if (toursMap['Asia']!.isNotEmpty) ...[
-                  _buildSectionTitle('Best Of Asia 2026'),
-                  _buildToursList(context, ref, toursMap['Asia']!),
-                ],
-                if (toursMap['Africa']!.isNotEmpty) ...[
-                  _buildSectionTitle('Tours In Africa 2026'),
-                  _buildToursList(context, ref, toursMap['Africa']!),
-                ],
-                if (toursMap['South America']!.isNotEmpty) ...[
-                  _buildSectionTitle('Travel In South America 2026'),
-                  _buildToursList(context, ref, toursMap['South America']!),
-                ],
-                if (toursMap['Australia']!.isNotEmpty) ...[
-                  _buildSectionTitle('Travel In Australia 2026'),
-                  _buildToursList(context, ref, toursMap['Australia']!),
-                ],
-                const SizedBox(height: 40),
-              ]),
-            ),
-          ],
-        ),
+              SliverList(
+                delegate: SliverChildListDelegate([
+                  if (!_isSearching)
+                    Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () => setState(() => _isSearching = true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0D2D44),
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(double.infinity, 56),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text('Discover All Trip Offers', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          IconButton(
+                            onPressed: () => _showFilterBottomSheet(allContinents),
+                            icon: const Icon(Icons.tune, color: Color(0xFF0D2D44), size: 30),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  if (_isSearching && tours.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(24.0),
+                      child: Center(child: Text('No tours found.')),
+                    ),
+
+                  for (var continent in continentsToShow) ...[
+                    if (filteredTours.any((t) => t.continent == continent)) ...[
+                      _buildSectionTitle('Best of $continent'),
+                      _buildToursList(context, ref, filteredTours.where((t) => t.continent == continent).toList()),
+                    ]
+                  ],
+                  const SizedBox(height: 100),
+                ]),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -279,7 +402,7 @@ class ToursScreen extends ConsumerWidget {
 
   Widget _buildToursList(BuildContext context, WidgetRef ref, List<TourData> items) {
     return SizedBox(
-      height: 380,
+      height: 400,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -301,16 +424,15 @@ class ToursScreen extends ConsumerWidget {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: Image.asset(
-                          item.images.isNotEmpty ? item.images[0] : 'assets/img.png',
-                          height: 200, width: 280, fit: BoxFit.cover,
-                        ),
+                        child: item.mainImageUrl.startsWith('assets/')
+                            ? Image.asset(item.mainImageUrl, height: 200, width: 280, fit: BoxFit.cover)
+                            : Image.file(File(item.mainImageUrl), height: 200, width: 280, fit: BoxFit.cover),
                       ),
                       Positioned(
                         top: 12,
                         right: 12,
                         child: GestureDetector(
-                          onTap: () => _showAddToPlanBottomSheet(context, ref, item),
+                          onTap: () => _showAddToPlanBottomSheet(item),
                           child: const CircleAvatar(
                             backgroundColor: Colors.white,
                             radius: 18,
@@ -326,21 +448,19 @@ class ToursScreen extends ConsumerWidget {
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0D2D44), height: 1.2),
                     maxLines: 2, overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Text(item.provider, style: const TextStyle(color: Colors.grey, fontSize: 14)),
                   Text(item.duration, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  Text(
+                    item.price, 
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF2D6A4F)),
+                  ),
                   const Spacer(),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text.rich(
-                        TextSpan(
-                          children: [
-                            const TextSpan(text: 'From ', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                            TextSpan(text: item.price, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0D2D44))),
-                          ],
-                        ),
-                      ),
+                      const Text('Explore Now', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0D2D44))),
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: const BoxDecoration(

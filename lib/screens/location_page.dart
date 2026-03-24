@@ -2,11 +2,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/location.dart';
+import '../models/user_role.dart';
 import '../notifiers/location_notifier.dart';
 import '../notifiers/navigation_notifier.dart';
 import '../notifiers/plan_notifier.dart';
+import '../notifiers/auth_notifier.dart';
+import '../repositories/auth_repository.dart';
 import '../repositories/plan_repository.dart';
 import 'guide_detail_screen.dart';
+import 'login_screen.dart';
 
 class LocationPage extends ConsumerStatefulWidget {
   final int locationId;
@@ -57,6 +61,12 @@ class _LocationPageState extends ConsumerState<LocationPage> with SingleTickerPr
   }
 
   void _showAddToPlanBottomSheet(Location location) async {
+    final userRole = ref.read(authNotifierProvider);
+    if (userRole == UserRole.guest) {
+      _showLoginRequiredDialog();
+      return;
+    }
+
     final plans = await ref.read(planNotifierProvider.future);
     
     if (!mounted) return;
@@ -106,7 +116,7 @@ class _LocationPageState extends ConsumerState<LocationPage> with SingleTickerPr
                         if (!mounted) return;
                         Navigator.pop(context);
                         if (success) {
-                          ref.read(navigationIndexProvider.notifier).state = 3;
+                          ref.read(navigationIndexProvider.notifier).state = 4; // My Plans index
                           Navigator.pop(context); // Also close the LocationPage
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -132,6 +142,26 @@ class _LocationPageState extends ConsumerState<LocationPage> with SingleTickerPr
             const SizedBox(height: 20),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showLoginRequiredDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Đăng nhập bắt buộc'),
+        content: const Text('Bạn cần đăng nhập để thêm địa điểm vào kế hoạch.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+            }, 
+            child: const Text('Đăng nhập')
+          ),
+        ],
       ),
     );
   }
@@ -175,7 +205,7 @@ class _LocationPageState extends ConsumerState<LocationPage> with SingleTickerPr
                     _newPlanController.clear();
                     if (mounted) {
                       Navigator.pop(context);
-                      ref.read(navigationIndexProvider.notifier).state = 3;
+                      ref.read(navigationIndexProvider.notifier).state = 4; // My Plans index
                       Navigator.pop(context); // Also close the LocationPage
                     }
                   }

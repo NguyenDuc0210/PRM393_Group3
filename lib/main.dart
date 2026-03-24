@@ -20,6 +20,12 @@ void main() async {
     const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
     const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
     await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+    // Xin quyền thông báo cho Android 13+
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+        
   } catch (e) {
     debugPrint('Firebase/Notification Init Error: $e');
   }
@@ -53,8 +59,6 @@ class MyApp extends ConsumerWidget {
         primarySwatch: Colors.green,
       ),
       locale: settings.locale,
-      // Lưu ý: Để thực sự đổi ngôn ngữ hiển thị text trong app, 
-      // bạn cần thiết lập Localization. Ở đây tôi đang làm khung sườn đổi Locale.
       home: const SplashScreen(), 
     );
   }

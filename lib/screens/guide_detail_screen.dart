@@ -3,8 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/author.dart';
 import '../models/location.dart';
+import '../models/user_role.dart';
+import '../notifiers/location_notifier.dart';
 import '../notifiers/plan_notifier.dart';
 import '../notifiers/navigation_notifier.dart';
+import '../notifiers/auth_notifier.dart';
+import '../notifiers/download_notifier.dart';
+import '../widgets/add_edit_location_form.dart';
 import 'author_detail_screen.dart';
 
 class GuideDetailScreen extends ConsumerStatefulWidget {
@@ -26,7 +31,7 @@ class _GuideDetailScreenState extends ConsumerState<GuideDetailScreen> {
 
   void _showAddToPlanBottomSheet(Location location) async {
     final plans = await ref.read(planNotifierProvider.future);
-    
+
     if (!mounted) return;
 
     showModalBottomSheet(
@@ -74,8 +79,7 @@ class _GuideDetailScreenState extends ConsumerState<GuideDetailScreen> {
                         if (!mounted) return;
                         Navigator.pop(context);
                         if (success) {
-                          ref.read(navigationIndexProvider.notifier).state = 3;
-                          Navigator.pop(context);
+                          ref.read(navigationIndexProvider.notifier).state = 4;
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Already in this plan.'), backgroundColor: Color(0xFF0D2D44)),
@@ -139,12 +143,11 @@ class _GuideDetailScreenState extends ConsumerState<GuideDetailScreen> {
                     final plans = await ref.read(planNotifierProvider.future);
                     final newPlan = plans.first;
                     await ref.read(planNotifierProvider.notifier).addLocationToPlan(newPlan.id, location.id);
-                    
+
                     _newPlanController.clear();
                     if (mounted) {
                       Navigator.pop(context);
-                      ref.read(navigationIndexProvider.notifier).state = 3;
-                      Navigator.pop(context);
+                      ref.read(navigationIndexProvider.notifier).state = 4;
                     }
                   }
                 },
@@ -163,10 +166,67 @@ class _GuideDetailScreenState extends ConsumerState<GuideDetailScreen> {
     );
   }
 
+  void _showEditGuideDialog(Location location) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Chỉnh sửa guide'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: AddEditLocationForm(locationId: location.id),
+          ),
+        ),
+      ),
+    ).then((_) {
+      // Refresh content if needed
+      setState(() {});
+    });
+  }
+
+  Future<void> _confirmDeleteLocation(Location item) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xóa guide?'),
+        content: Text('Bạn có chắc muốn xóa "${item.name}"? Hành động này không hoàn tác.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    try {
+      await ref.read(locationNotifierProvider.notifier).deleteLocation(item.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã xóa guide.'), backgroundColor: Colors.green),
+      );
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final author = Author.sampleAuthor;
-    final item = widget.location ?? Location.sampleLocations.firstWhere((l) => l.id == 116); // Fallback to "The Castro" content if none provided
+    final item = widget.location ?? Location.sampleLocations.firstWhere((l) => l.id == 116);
+    final userRole = ref.watch(authNotifierProvider);
+    final isAdmin = userRole == UserRole.admin;
+    
+    final downloadState = ref.watch(downloadProvider);
+    final isDownloading = downloadState.downloadingIds.contains(item.id);
+    final isDownloaded = downloadState.downloadedArticles.any((a) => a['articleId'] == item.id);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -184,18 +244,55 @@ class _GuideDetailScreenState extends ConsumerState<GuideDetailScreen> {
         ),
         leadingWidth: 100,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.file_download_outlined, color: Color(0xFF0D2D44)),
-            onPressed: () {},
-          ),
+          if (isAdmin && widget.location != null) ...[
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, color: Color(0xFF0D2D44)),
+              tooltip: 'Chỉnh sửa',
+              onPressed: () => _showEditGuideDialog(widget.location!),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              tooltip: 'Xóa guide',
+              onPressed: () => _confirmDeleteLocation(widget.location!),
+            ),
+          ],
+          
+          if (isDownloading)
+            const Padding(
+              padding: EdgeInsets.all(12.0),
+              child: SizedBox(
+                width: 24, height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue),
+              ),
+            )
+          else if (isDownloaded)
+            const Padding(
+              padding: EdgeInsets.all(12.0),
+              child: Icon(Icons.download_done, color: Colors.green, size: 28),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.file_download_outlined, color: Color(0xFF0D2D44)),
+              onPressed: () {
+                final articleMap = {
+                  'id': item.id,
+                  'name': item.name,
+                  'description': item.description,
+                  'fullContent': item.description,
+                  'imageUrl': item.imageUrl,
+                };
+                ref.read(downloadProvider.notifier).downloadArticle(articleMap, context: context);
+              },
+            ),
+
           Consumer(
             builder: (context, ref, child) {
               final isInPlanAsync = ref.watch(isLocationInAnyPlanProvider(item.id));
               return isInPlanAsync.when(
                 data: (isInPlan) => IconButton(
                   icon: Icon(
-                    isInPlan ? Icons.bookmark : Icons.bookmark_border, 
-                    color: const Color(0xFF0D2D44)
+                      isInPlan ? Icons.bookmark : Icons.bookmark_border,
+                      color: const Color(0xFF0D2D44)
                   ),
                   onPressed: () => _showAddToPlanBottomSheet(item),
                 ),
@@ -211,7 +308,22 @@ class _GuideDetailScreenState extends ConsumerState<GuideDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Main Image
+            if (isDownloaded)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                color: Colors.green[50],
+                child: const Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.offline_pin, color: Colors.green, size: 16),
+                      SizedBox(width: 8),
+                      Text('Offline content available', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
             Image.asset(
               item.imageUrl,
               width: double.infinity,
@@ -232,7 +344,6 @@ class _GuideDetailScreenState extends ConsumerState<GuideDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  // Author Info - Clickable
                   GestureDetector(
                     onTap: () => Navigator.push(
                       context,
@@ -262,7 +373,6 @@ class _GuideDetailScreenState extends ConsumerState<GuideDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  // Article Content
                   Text(
                     item.description,
                     style: const TextStyle(fontSize: 16, height: 1.6, color: Colors.black87),
@@ -290,7 +400,6 @@ class _GuideDetailScreenState extends ConsumerState<GuideDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  // Author Card - Clickable
                   GestureDetector(
                     onTap: () => Navigator.push(
                       context,
@@ -344,7 +453,6 @@ class _GuideDetailScreenState extends ConsumerState<GuideDetailScreen> {
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 20),
-                  // Read Next Cards
                   SizedBox(
                     height: 300,
                     child: ListView(

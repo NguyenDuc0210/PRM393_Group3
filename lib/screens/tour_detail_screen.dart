@@ -1,13 +1,14 @@
-
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/tour_data.dart';
-import '../models/location.dart'; 
+import '../models/location.dart';
 import '../notifiers/plan_notifier.dart';
 import '../notifiers/navigation_notifier.dart';
-import '../repositories/database_helper.dart'; 
-import 'tours_screen.dart';
+import '../notifiers/tour_notifier.dart';
+import '../repositories/database_helper.dart';
+import 'add_edit_tour_screen.dart';
 
 class TourDetailScreen extends ConsumerStatefulWidget {
   final int tourId;
@@ -24,17 +25,31 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
   int _currentPage = 0;
   bool _isVisitingExpanded = false;
   late Future<TourData> _tourFuture;
+  late Future<List<Map<String, dynamic>>> _reviewsFuture;
 
   @override
   void initState() {
     super.initState();
-    // Đã đổi sang DatabaseHelper
-    _tourFuture = DatabaseHelper.instance.getFullTourDetails(widget.tourId);
+    _loadTour();
+    _loadReviews();
+  }
+
+  void _loadTour() {
+    setState(() {
+      _tourFuture = DatabaseHelper.instance.getFullTourDetails(widget.tourId);
+    });
     _startAutoPlay();
   }
 
+  void _loadReviews() {
+    setState(() {
+      _reviewsFuture = DatabaseHelper.instance.getReviewsByTourId(widget.tourId);
+    });
+  }
+
   void _startAutoPlay() {
-    _autoPlayTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+    _autoPlayTimer?.cancel();
+    _autoPlayTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       _tourFuture.then((tour) {
         if (tour.images.isEmpty) return;
         if (_currentPage < tour.images.length - 1) {
@@ -72,7 +87,9 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.asset(mapUrl, fit: BoxFit.contain),
+              child: mapUrl.startsWith('assets/')
+                  ? Image.asset(mapUrl, fit: BoxFit.contain)
+                  : Image.file(File(mapUrl), fit: BoxFit.contain),
             ),
             IconButton(
               icon: const Icon(Icons.close, color: Colors.white, size: 30),
@@ -91,7 +108,7 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
       address: tour.provider,
       description: tour.overview,
       countStar: 0,
-      imageUrl: tour.images.isNotEmpty ? tour.images[0] : 'assets/img.png',
+      imageUrl: tour.mainImageUrl,
       continent: tour.continent.toLowerCase(),
       type: 'tour',
     );
@@ -100,7 +117,7 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
   void _showAddToPlanBottomSheet(TourData tour) async {
     final location = _getTourAsLocation(tour);
     final plans = await ref.read(planNotifierProvider.future);
-    
+
     if (!mounted) return;
 
     showModalBottomSheet(
@@ -158,6 +175,7 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
                           Container(
                             width: 80, height: 80,
                             decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(8)),
+                            child: const Icon(Icons.folder, color: Colors.white, size: 40),
                           ),
                           const SizedBox(height: 8),
                           Text(plan.name, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
@@ -209,10 +227,10 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
                     await ref.read(planNotifierProvider.notifier).addPlan(_newPlanController.text.trim());
                     final plans = await ref.read(planNotifierProvider.future);
                     final newPlan = plans.first;
-                    
+
                     await DatabaseHelper.instance.insertLocation(location);
                     await ref.read(planNotifierProvider.notifier).addLocationToPlan(newPlan.id, location.id);
-                    
+
                     _newPlanController.clear();
                     if (mounted) {
                       Navigator.pop(context);
@@ -236,6 +254,119 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
     );
   }
 
+  void _showDeleteConfirmation(int tourId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Tour', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+        content: const Text('Are you sure you want to delete this tour? This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            onPressed: () async {
+              await ref.read(tourNotifierProvider.notifier).deleteTour(tourId);
+              if (mounted) {
+                Navigator.pop(context); // Close dialog
+                Navigator.pop(context); // Go back to list
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddReviewDialog(int tourId) {
+    final nameController = TextEditingController();
+    final commentController = TextEditingController();
+    double currentRating = 5.0;
+    String? errorText;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add Review', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (errorText != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Text(errorText!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                  ),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'Your Name', hintText: 'Enter your name'),
+                  onChanged: (_) => setDialogState(() => errorText = null),
+                ),
+                const SizedBox(height: 20),
+                const Align(alignment: Alignment.centerLeft, child: Text('Rating', style: TextStyle(fontWeight: FontWeight.bold))),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Slider(
+                        value: currentRating, min: 1, max: 5, divisions: 4, activeColor: Colors.amber,
+                        label: currentRating.toString(),
+                        onChanged: (val) => setDialogState(() => currentRating = val),
+                      ),
+                    ),
+                    Text(currentRating.toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const Icon(Icons.star, color: Colors.amber),
+                  ],
+                ),
+                TextField(
+                  controller: commentController,
+                  decoration: const InputDecoration(labelText: 'Comment', hintText: 'Share your experience'),
+                  maxLines: 3,
+                  onChanged: (_) => setDialogState(() => errorText = null),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+            ElevatedButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                final comment = commentController.text.trim();
+
+                if (name.isEmpty || comment.isEmpty) {
+                  setDialogState(() {
+                    errorText = 'Please fill in both name and comment';
+                  });
+                  return;
+                }
+
+                await DatabaseHelper.instance.insertReview(tourId, name, currentRating, comment);
+                if (mounted) {
+                  Navigator.pop(context);
+                  _loadReviews(); // Refresh only reviews
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Review posted successfully!')),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D2D44)),
+              child: const Text('Post Review', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _displayImage(String path, {double? width, double? height, BoxFit fit = BoxFit.cover}) {
+    if (path.startsWith('assets/')) {
+      return Image.asset(path, width: width, height: height, fit: fit);
+    } else {
+      return Image.file(File(path), width: width, height: height, fit: fit);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<TourData>(
@@ -248,14 +379,6 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
           return Scaffold(body: Center(child: Text('Error: ${snapshot.error}')));
         }
         final tour = snapshot.data!;
-
-        // Xử lý logic hiển thị startingEnding và country để tránh dấu phẩy dư thừa
-        String headerSub = '';
-        if (tour.startingEnding.isNotEmpty && tour.country.isNotEmpty) {
-          headerSub = '${tour.startingEnding}, ${tour.country}';
-        } else {
-          headerSub = tour.startingEnding + tour.country;
-        }
 
         return Scaffold(
           backgroundColor: Colors.white,
@@ -276,28 +399,38 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
                   IconButton(
                     icon: const CircleAvatar(
                       backgroundColor: Colors.white,
-                      child: Icon(Icons.file_download_outlined, color: Colors.black, size: 20),
+                      child: Icon(Icons.edit, color: Colors.black, size: 20),
                     ),
-                    onPressed: () {},
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => AddEditTourScreen(tour: tour)),
+                      );
+                      if (result == true) {
+                        _loadTour();
+                      }
+                    },
+                  ),
+                  IconButton(
+                    icon: const CircleAvatar(
+                      backgroundColor: Colors.white,
+                      child: Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                    ),
+                    onPressed: () => _showDeleteConfirmation(tour.id!),
                   ),
                   const SizedBox(width: 10),
                 ],
                 flexibleSpace: FlexibleSpaceBar(
                   background: Stack(
                     children: [
-                      if (tour.images.isNotEmpty)
-                        PageView.builder(
-                          controller: _pageController,
-                          itemCount: tour.images.length,
-                          onPageChanged: (index) => setState(() => _currentPage = index),
-                          itemBuilder: (context, index) {
-                            return Image.asset(
-                              tour.images[index],
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                            );
-                          },
-                        ),
+                      PageView.builder(
+                        controller: _pageController,
+                        itemCount: tour.images.length,
+                        onPageChanged: (index) => setState(() => _currentPage = index),
+                        itemBuilder: (context, index) {
+                          return _displayImage(tour.images[index], width: double.infinity);
+                        },
+                      ),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Padding(
@@ -343,7 +476,7 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(6),
-                                child: Image.asset(tour.mapImageUrl, fit: BoxFit.cover),
+                                child: _displayImage(tour.mapImageUrl),
                               ),
                             ),
                           ),
@@ -358,30 +491,25 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(tour.views, style: const TextStyle(color: Color(0xFF0D2D44), fontWeight: FontWeight.bold, fontSize: 16)),
-                          Row(
-                            children: [
-                              Text('${tour.duration.split(' ')[0]} Days From ', style: const TextStyle(color: Color(0xFF0D2D44), fontWeight: FontWeight.bold, fontSize: 16)),
-                              if (tour.oldPrice.isNotEmpty)
-                                Text(tour.oldPrice, style: const TextStyle(fontSize: 16, color: Colors.red, decoration: TextDecoration.lineThrough, fontWeight: FontWeight.bold)),
-                              const SizedBox(width: 4),
-                              Text(tour.price, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF0D2D44))),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 32),
+                      Text(tour.views, style: const TextStyle(color: Color(0xFF0D2D44), fontWeight: FontWeight.bold, fontSize: 16)),
+                      const SizedBox(height: 16),
                       Text(
                         tour.name,
                         style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF0D2D44), height: 1.1, letterSpacing: -1),
                       ),
-                      if (headerSub.isNotEmpty) ...[
-                        const SizedBox(height: 32),
-                        Text(headerSub, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFF0D2D44))),
-                      ],
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          const Icon(Icons.timer_outlined, size: 20, color: Colors.grey),
+                          const SizedBox(width: 8),
+                          Text(tour.duration, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
+                          const Spacer(),
+                          Text(
+                            tour.price,
+                            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFF2D6A4F)),
+                          ),
+                        ],
+                      ),
                       if (tour.visiting.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         RichText(
@@ -414,31 +542,96 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
                         ...tour.highlights.map((h) => _buildCheckHighlight(h.title)),
                         const SizedBox(height: 32),
                       ],
-                      if (tour.included.isNotEmpty) ...[
-                        const Text("What's Included", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF0D2D44))),
-                        const SizedBox(height: 16),
-                        ...tour.included.map((i) => _buildIncludedItem(i.title, i.description ?? '')),
-                        const SizedBox(height: 32),
-                      ],
-                      if (tour.notIncluded.isNotEmpty) ...[
-                        const Text("What's Not Included", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF0D2D44))),
-                        const SizedBox(height: 16),
-                        ...tour.notIncluded.map((ni) => _buildNotIncludedItem(ni.title, ni.description ?? '')),
-                        const SizedBox(height: 32),
-                      ],
                       if (tour.itinerary.isNotEmpty) ...[
                         const Text('Itinerary', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF0D2D44))),
                         const SizedBox(height: 16),
                         ...tour.itinerary.map((day) => _buildItineraryDay(
-                          day.dayTitle, 
-                          isFirst: tour.itinerary.indexOf(day) == 0,
+                          day.dayTitle,
                           isLast: tour.itinerary.indexOf(day) == tour.itinerary.length - 1,
-                          isExpanded: tour.itinerary.indexOf(day) == 2, 
+                          isExpanded: true,
                           description: day.description,
-                          location: day.location,
-                          accommodation: day.accommodation,
                         )),
                       ],
+                      const SizedBox(height: 32),
+                      const Divider(),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Reviews', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF0D2D44))),
+                          TextButton.icon(
+                            onPressed: () => _showAddReviewDialog(tour.id!),
+                            icon: const Icon(Icons.rate_review_outlined),
+                            label: const Text('Write a review'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      FutureBuilder<List<Map<String, dynamic>>>(
+                        future: _reviewsFuture,
+                        builder: (context, revSnapshot) {
+                          if (revSnapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
+                          if (!revSnapshot.hasData || revSnapshot.data!.isEmpty) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              width: double.infinity,
+                              decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12)),
+                              child: const Column(
+                                children: [
+                                  Icon(Icons.reviews_outlined, color: Colors.grey, size: 40),
+                                  SizedBox(height: 8),
+                                  Text('No reviews yet. Be the first to review!', style: TextStyle(color: Colors.grey)),
+                                ],
+                              ),
+                            );
+                          }
+                          return Column(
+                            children: revSnapshot.data!.map((rev) => Card(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              elevation: 0,
+                              color: Colors.grey[50],
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const CircleAvatar(backgroundColor: Color(0xFFC8F2C2), child: Icon(Icons.person, color: Color(0xFF0D2D44))),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(rev['userName'] ?? 'Anonymous', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                              Text(rev['date'] != null ? rev['date'].toString().substring(0, 10) : 'Recently', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                            ],
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(color: Colors.amber.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                                          child: Row(
+                                            children: [
+                                              Text(rev['rating'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.amber)),
+                                              const Icon(Icons.star, color: Colors.amber, size: 16),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(rev['comment'] ?? '', style: const TextStyle(fontSize: 15, height: 1.4)),
+                                  ],
+                                ),
+                              ),
+                            )).toList(),
+                          );
+                        },
+                      ),
                       const SizedBox(height: 100),
                     ],
                   ),
@@ -449,31 +642,16 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
           bottomNavigationBar: Container(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
             decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey.shade200))),
-            child: Row(
-              children: [
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('From', style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold)),
-                    Text(tour.price, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Color(0xFF0D2D44))),
-                  ],
-                ),
-                const SizedBox(width: 32),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _showAddToPlanBottomSheet(tour),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0D2D44),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      elevation: 0,
-                    ),
-                    child: const Text('Cho vào plan', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-                  ),
-                ),
-              ],
+            child: ElevatedButton(
+              onPressed: () => _showAddToPlanBottomSheet(tour),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D2D44),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                elevation: 0,
+              ),
+              child: const Text('Add to Plan', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
             ),
           ),
         );
@@ -486,24 +664,19 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
       children: [
         Row(children: [_buildDetailCell('Tour Operator:', tour.tourOperator), _buildDetailCell('Tour Code:', tour.tourCode)]),
         const SizedBox(height: 20),
-        Row(children: [_buildDetailCell('Guide Type:', tour.guideType, hasInfo: true), _buildDetailCell('Group Size:', tour.groupSize)]),
+        Row(children: [_buildDetailCell('Guide Type:', tour.guideType), _buildDetailCell('Group Size:', tour.groupSize)]),
         const SizedBox(height: 20),
         Row(children: [_buildDetailCell('Physical Rating:', tour.physicalRating), _buildDetailCell('Age Range:', tour.ageRange)]),
-        const SizedBox(height: 20),
-        Row(children: [_buildDetailCell('Tour Operated In:', tour.tourOperatedIn), _buildDetailCell('Trip Styles:', tour.tripStyle)]),
       ],
     );
   }
 
-  Widget _buildDetailCell(String label, String value, {bool hasInfo = false}) {
+  Widget _buildDetailCell(String label, String value) {
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Text(label, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
-            if (hasInfo) ...[const SizedBox(width: 4), const Icon(Icons.info_outline, size: 14, color: Colors.green)],
-          ]),
+          Text(label, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 4),
           Text(value, style: const TextStyle(color: Color(0xFF0D2D44), fontSize: 16)),
         ],
@@ -525,47 +698,7 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
     );
   }
 
-  Widget _buildIncludedItem(String title, String desc) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            const Icon(Icons.check_circle_outline, color: Colors.green, size: 24),
-            const SizedBox(width: 12),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0D2D44))),
-          ]),
-          Padding(
-            padding: const EdgeInsets.only(left: 36, top: 8),
-            child: Text(desc, style: const TextStyle(fontSize: 16, height: 1.5, color: Colors.black87)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNotIncludedItem(String title, String desc) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            const Icon(Icons.cancel_outlined, color: Colors.red, size: 24),
-            const SizedBox(width: 12),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0D2D44))),
-          ]),
-          Padding(
-            padding: const EdgeInsets.only(left: 36, top: 8),
-            child: Text(desc, style: const TextStyle(fontSize: 16, height: 1.5, color: Colors.black87)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildItineraryDay(String title, {bool isFirst = false, bool isLast = false, bool isExpanded = false, String? description, String? location, String? accommodation}) {
+  Widget _buildItineraryDay(String title, {bool isLast = false, bool isExpanded = false, String? description}) {
     return IntrinsicHeight(
       child: Row(
         children: [
@@ -578,38 +711,10 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0D2D44))),
-                    Icon(isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: Colors.orange),
-                  ],
-                ),
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0D2D44))),
                 if (isExpanded) ...[
                   const SizedBox(height: 12),
                   Text(description ?? '', style: const TextStyle(fontSize: 15, height: 1.5, color: Colors.black87)),
-                  const SizedBox(height: 16),
-                  if (location != null) ...[
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.location_on_outlined, color: Colors.orange, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text('Location:\n$location', style: const TextStyle(fontSize: 14, color: Color(0xFF0D2D44)))),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (accommodation != null) ...[
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.king_bed_outlined, color: Colors.orange, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text('Accommodation:\n$accommodation', style: const TextStyle(fontSize: 14, color: Color(0xFF0D2D44)))),
-                      ],
-                    ),
-                  ],
                 ],
                 const SizedBox(height: 24),
               ],

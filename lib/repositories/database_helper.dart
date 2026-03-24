@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/location.dart';
 import '../models/tour_data.dart';
 
@@ -21,29 +22,35 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 23, // Nâng lên 23 để cập nhật nội dung Visiting và xóa khoảng trống
+      version: 26,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 23) {
-      await db.execute('DROP TABLE IF EXISTS locations');
-      await db.execute('DROP TABLE IF EXISTS plans');
-      await db.execute('DROP TABLE IF EXISTS plan_items');
-      await db.execute('DROP TABLE IF EXISTS the_100_categories');
-      await db.execute('DROP TABLE IF EXISTS the_100_items');
-      await db.execute('DROP TABLE IF EXISTS tours');
-      await db.execute('DROP TABLE IF EXISTS tour_images');
-      await db.execute('DROP TABLE IF EXISTS tour_features');
-      await db.execute('DROP TABLE IF EXISTS tour_itinerary');
-      await _createDB(db, newVersion);
+    if (oldVersion < 25) {
+      try {
+        await db.execute('ALTER TABLE plans ADD COLUMN userId TEXT DEFAULT ""');
+      } catch (e) {}
+    }
+    if (oldVersion < 26) {
+      await db.execute('''
+        CREATE TABLE downloaded_articles (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          articleId INTEGER NOT NULL,
+          userId TEXT NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT NOT NULL,
+          fullContent TEXT NOT NULL,
+          imageUrl TEXT NOT NULL,
+          downloadedAt TEXT NOT NULL
+        )
+      ''');
     }
   }
 
   Future _createDB(Database db, int version) async {
-    // 1. Locations
     await db.execute('''
       CREATE TABLE locations (
         id INTEGER PRIMARY KEY,
@@ -58,17 +65,16 @@ class DatabaseHelper {
       )
     ''');
 
-    // 2. Plans
     await db.execute('''
       CREATE TABLE plans (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
+        userId TEXT NOT NULL,
         articleCount INTEGER NOT NULL,
         createdAt TEXT NOT NULL
       )
     ''');
 
-    // 3. Plan Items
     await db.execute('''
       CREATE TABLE plan_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,7 +85,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 4. The 100 Categories
     await db.execute('''
       CREATE TABLE the_100_categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,7 +95,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 5. The 100 Items
     await db.execute('''
       CREATE TABLE the_100_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,15 +107,25 @@ class DatabaseHelper {
       )
     ''');
 
-    // 6. Tours
+    await db.execute('''
+      CREATE TABLE downloaded_articles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        articleId INTEGER NOT NULL,
+        userId TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        fullContent TEXT NOT NULL,
+        imageUrl TEXT NOT NULL,
+        downloadedAt TEXT NOT NULL
+      )
+    ''');
+
     await db.execute('''
       CREATE TABLE tours (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         provider TEXT,
         duration TEXT,
-        price TEXT,
-        oldPrice TEXT,
         continent TEXT,
         views TEXT,
         startingEnding TEXT,
@@ -127,11 +141,11 @@ class DatabaseHelper {
         tripStyle TEXT,
         overview TEXT,
         mapImageUrl TEXT,
-        mainImageUrl TEXT
+        mainImageUrl TEXT,
+        price TEXT
       )
     ''');
 
-    // 7. Tour Images
     await db.execute('''
       CREATE TABLE tour_images (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -141,7 +155,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 8. Tour Features
     await db.execute('''
       CREATE TABLE tour_features (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -153,7 +166,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 9. Tour Itinerary
     await db.execute('''
       CREATE TABLE tour_itinerary (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -166,7 +178,18 @@ class DatabaseHelper {
       )
     ''');
 
-    // Nạp dữ liệu mẫu cho Locations
+    await db.execute('''
+      CREATE TABLE tour_reviews (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tourId INTEGER,
+        userName TEXT,
+        rating REAL,
+        comment TEXT,
+        date TEXT,
+        FOREIGN KEY (tourId) REFERENCES tours (id) ON DELETE CASCADE
+      )
+    ''');
+
     for (var loc in Location.sampleLocations) {
       await db.insert('locations', {
         'id': loc.id, 'name': loc.name, 'address': loc.address, 'description': loc.description,
@@ -209,139 +232,48 @@ class DatabaseHelper {
 
   Future<void> _insertTourSampleData(Database db) async {
     List<Map<String, dynamic>> sampleTours = [
-      // Europe
-      {
-        'name': 'Greece sailing adventure: cyclades islands',
-        'provider': 'by Intrepid Travel',
-        'duration': '8 days',
-        'price': '\$2372',
-        'continent': 'Europe',
-        'mainImageUrl': 'assets/img.png',
-        'visiting': 'Santorini, Mykonos, Naxos, Amorgos, Ios, and more beautiful Cyclades islands.'
-      },
-      {
-        'name': 'Highlights of Italy',
-        'provider': 'by Expat Explore',
-        'duration': '10 days',
-        'price': '\$1850',
-        'continent': 'Europe',
-        'mainImageUrl': 'assets/img_5.png',
-        'visiting': 'Rome, Florence, Venice, Pisa, Lake Garda, Milan, and the Vatican City.'
-      },
-      // Asia
-      {
-        'name': 'Delhi to goa',
-        'provider': 'by Intrepid Travel',
-        'duration': '15 days',
-        'price': '\$747',
-        'continent': 'Asia',
-        'mainImageUrl': 'assets/img_1.png',
-        'visiting': 'Delhi, Agra (Taj Mahal), Jaipur, Udaipur, Mumbai, and the beaches of Goa.'
-      },
-      {
-        'name': 'Vietnam Express Southbound',
-        'provider': 'by Intrepid Travel',
-        'duration': '10 days',
-        'price': '\$1250',
-        'continent': 'Asia',
-        'mainImageUrl': 'assets/img_6.png',
-        'visiting': 'Hanoi, Halong Bay, Hue, Hoi An, Ho Chi Minh City, and the Mekong Delta.'
-      },
-      // Africa
-      {
-        'name': 'Cape town to zanzibar',
-        'provider': 'by Intrepid Travel',
-        'duration': '41 days',
-        'price': '\$4953',
-        'continent': 'Africa',
-        'mainImageUrl': 'assets/img_2.png',
-        'visiting': 'Cape Town, Victoria Falls, Serengeti National Park, Ngorongoro Crater, and Zanzibar beaches.'
-      },
-      {
-        'name': 'Kenya Wildlife Safari',
-        'provider': 'by G Adventures',
-        'duration': '8 days',
-        'price': '\$2100',
-        'continent': 'Africa',
-        'mainImageUrl': 'assets/img.png',
-        'visiting': 'Nairobi, Masai Mara National Reserve, Lake Nakuru, and Amboseli National Park.'
-      },
-      // South America
-      {
-        'name': 'The great south american journey: quito to rio adventure',
-        'provider': 'by G Adventures',
-        'duration': '65 days',
-        'price': '\$8659',
-        'continent': 'South America',
-        'mainImageUrl': 'assets/img_3.png',
-        'visiting': 'Quito, Amazon Rainforest, Machu Picchu, Lake Titicaca, Buenos Aires, Iguassu Falls, and Rio de Janeiro.'
-      },
-      {
-        'name': 'Machu Picchu Adventure',
-        'provider': 'by Intrepid Travel',
-        'duration': '7 days',
-        'price': '\$1500',
-        'continent': 'South America',
-        'mainImageUrl': 'assets/img_1.png',
-        'visiting': 'Cusco, Sacred Valley, Inca Trail, and the lost city of Machu Picchu.'
-      },
-      // Australia
-      {
-        'name': 'The wonders of australia with new zealand',
-        'provider': 'by Travelsphere',
-        'duration': '48 days',
-        'price': '£ 15.298',
-        'continent': 'Australia',
-        'mainImageUrl': 'assets/img_4.png',
-        'visiting': 'Sydney, Great Barrier Reef, Ayers Rock (Uluru), Melbourne, Auckland, Rotorua, and Queenstown.'
-      },
-      {
-        'name': 'Great Ocean Road Tour',
-        'provider': 'by Go West Tours',
-        'duration': '3 days',
-        'price': '\$450',
-        'continent': 'Australia',
-        'mainImageUrl': 'assets/img_2.png',
-        'visiting': 'Melbourne, Torquay, Lorne, Apollo Bay, and the Twelve Apostles.'
-      },
+      {'name': 'Greece sailing adventure: cyclades islands', 'provider': 'by Intrepid Travel', 'duration': '8 days', 'continent': 'Europe', 'mainImageUrl': 'assets/img.png', 'visiting': 'Santorini, Mykonos, naxos, Amorgos, Ios.', 'price': 'From \$1,200'},
+      {'name': 'Highlights of Italy', 'provider': 'by Expat Explore', 'duration': '10 days', 'continent': 'Europe', 'mainImageUrl': 'assets/img_5.png', 'visiting': 'Rome, Florence, Venice, Pisa, Milan.', 'price': 'From \$1,500'},
+      {'name': 'Vietnam Express Southbound', 'provider': 'by Intrepid Travel', 'duration': '10 days', 'continent': 'Asia', 'mainImageUrl': 'assets/img_6.png', 'visiting': 'Hanoi, Halong Bay, Hue, Hoi An, HCMC.', 'price': 'From \$800'},
     ];
 
-    for (var tourData in sampleTours) {
+    List<Map<String, dynamic>> reviewSamples = [
+      {'userName': 'Nguyễn Văn Hưng', 'rating': 5.0, 'comment': 'Chuyến đi trên cả tuyệt vời! Hướng dẫn viên cực kỳ có tâm.'},
+      {'userName': 'Linh Chi', 'rating': 5.0, 'comment': 'Cảnh đẹp mê hồn, đồ ăn rất ngon.'},
+      {'userName': 'John Watson', 'rating': 4.0, 'comment': 'Well organized tour.'},
+    ];
+
+    for (int i = 0; i < sampleTours.length; i++) {
+      var tourData = sampleTours[i];
       int tourId = await db.insert('tours', {
-        'name': tourData['name'],
-        'provider': tourData['provider'],
-        'duration': tourData['duration'],
-        'price': tourData['price'],
-        'continent': tourData['continent'],
-        'mainImageUrl': tourData['mainImageUrl'],
-        'visiting': tourData['visiting'] ?? '',
-        'views': '125K Views',
-        'startingEnding': '', // Xóa nội dung cũ để tránh khoảng trống
-        'country': '', // Xóa nội dung cũ
-        'tourOperator': tourData['provider'].replaceAll('by ', ''),
-        'tourCode': 'TOUR-${tourData['continent'].substring(0, 2).toUpperCase()}-${DateTime.now().millisecond}',
-        'guideType': 'Fully Guided',
-        'groupSize': '1 - 20',
-        'physicalRating': 'Medium',
-        'ageRange': '12+',
-        'tourOperatedIn': 'English',
-        'tripStyle': 'Adventure, Discovery',
-        'overview': 'Explore the wonders of ${tourData['continent']} in this amazing tour.',
-        'mapImageUrl': 'assets/img_6.png',
+        'name': tourData['name'], 'provider': tourData['provider'], 'duration': tourData['duration'],
+        'continent': tourData['continent'], 'mainImageUrl': tourData['mainImageUrl'],
+        'visiting': tourData['visiting'] ?? '', 'views': '${150 + i * 20}K Views',
+        'startingEnding': 'Round trip', 'country': 'Various', 'tourOperator': tourData['provider'].replaceAll('by ', ''),
+        'tourCode': 'T-${tourData['continent'].substring(0, 1).toUpperCase()}${1000 + i}',
+        'guideType': 'Expert Local Guide', 'groupSize': 'Max 12', 'physicalRating': 'Light',
+        'ageRange': '8 - 80', 'tourOperatedIn': 'English', 'tripStyle': 'Adventure',
+        'overview': 'Discover the soul of ${tourData['continent']} in this journey.',
+        'mapImageUrl': 'assets/img_6.png', 'price': tourData['price']
       });
 
       await db.insert('tour_images', {'tourId': tourId, 'imageUrl': tourData['mainImageUrl']});
       await db.insert('tour_itinerary', {
-        'tourId': tourId, 
-        'dayTitle': 'Day 1: Arrival', 
-        'description': 'Welcome to your adventure!', 
-        'location': 'Start Point', 
-        'accommodation': 'Hotel'
+        'tourId': tourId, 'dayTitle': 'Day 1: Arrival', 'description': 'Welcome dinner.',
+        'location': 'Airport', 'accommodation': 'Boutique Hotel'
       });
+      await db.insert('tour_features', {'tourId': tourId, 'title': 'Professional Local Guide', 'type': 'highlight'});
+
+      for (int j = 0; j < 3; j++) {
+        var rev = reviewSamples[(i * 3 + j) % reviewSamples.length];
+        await db.insert('tour_reviews', {
+          'tourId': tourId, 'userName': rev['userName'], 'rating': rev['rating'],
+          'comment': rev['comment'], 'date': DateTime.now().subtract(Duration(days: j * 7)).toIso8601String(),
+        });
+      }
     }
   }
 
-  // --- Location CRUD ---
   Future<List<Location>> getAllLocations() async {
     final db = await instance.database;
     final result = await db.query('locations');
@@ -377,15 +309,23 @@ class DatabaseHelper {
     return await db.delete('locations', where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- Plan CRUD ---
   Future<List<Map<String, dynamic>>> getAllPlans() async {
     final db = await instance.database;
-    return await db.query('plans', orderBy: 'createdAt DESC');
+    final user = FirebaseAuth.instance.currentUser;
+    final userId = user?.uid ?? "";
+    return await db.query('plans', where: 'userId = ?', whereArgs: [userId], orderBy: 'createdAt DESC');
   }
 
   Future<int> insertPlan(String name) async {
     final db = await instance.database;
-    return await db.insert('plans', {'name': name, 'articleCount': 0, 'createdAt': DateTime.now().toIso8601String()});
+    final user = FirebaseAuth.instance.currentUser;
+    final userId = user?.uid ?? "";
+    return await db.insert('plans', {
+      'name': name, 
+      'userId': userId,
+      'articleCount': 0, 
+      'createdAt': DateTime.now().toIso8601String()
+    });
   }
 
   Future<int> updatePlanName(int id, String newName) async {
@@ -426,11 +366,62 @@ class DatabaseHelper {
 
   Future<bool> isLocationInAnyPlan(int locationId) async {
     final db = await instance.database;
-    final result = await db.query('plan_items', where: 'locationId = ?', whereArgs: [locationId], limit: 1);
+    final user = FirebaseAuth.instance.currentUser;
+    final userId = user?.uid ?? "";
+    final result = await db.rawQuery('''
+      SELECT pi.id FROM plan_items pi 
+      JOIN plans p ON pi.planId = p.id 
+      WHERE pi.locationId = ? AND p.userId = ?
+    ''', [locationId, userId]);
     return result.isNotEmpty;
   }
 
-  // --- The 100 CRUD ---
+  Future<int> insertDownloadedArticle(Map<String, dynamic> article) async {
+    final db = await instance.database;
+    final user = FirebaseAuth.instance.currentUser;
+    final userId = user?.uid ?? "";
+    
+    final existing = await db.query('downloaded_articles', 
+      where: 'articleId = ? AND userId = ?', 
+      whereArgs: [article['id'], userId]);
+      
+    if (existing.isNotEmpty) return -1;
+
+    return await db.insert('downloaded_articles', {
+      'articleId': article['id'],
+      'userId': userId,
+      'name': article['name'],
+      'description': article['description'],
+      'fullContent': article['fullContent'],
+      'imageUrl': article['imageUrl'],
+      'downloadedAt': DateTime.now().toIso8601String()
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getDownloadedArticles() async {
+    final db = await instance.database;
+    final user = FirebaseAuth.instance.currentUser;
+    final userId = user?.uid ?? "";
+    // ĐÃ SỬA: Thêm whereArgs: [userId]
+    return await db.query('downloaded_articles', where: 'userId = ?', whereArgs: [userId], orderBy: 'downloadedAt DESC');
+  }
+
+  Future<bool> isArticleDownloaded(int articleId) async {
+    final db = await instance.database;
+    final user = FirebaseAuth.instance.currentUser;
+    final userId = user?.uid ?? "";
+    // ĐÃ SỬA: Thêm whereArgs: [userId]
+    final result = await db.query('downloaded_articles', 
+      where: 'articleId = ? AND userId = ?', 
+      whereArgs: [articleId, userId]);
+    return result.isNotEmpty;
+  }
+
+  Future<int> deleteDownloadedArticle(int id) async {
+    final db = await instance.database;
+    return await db.delete('downloaded_articles', where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<List<Map<String, dynamic>>> getThe100Categories() async {
     final db = await instance.database;
     return await db.query('the_100_categories');
@@ -471,57 +462,92 @@ class DatabaseHelper {
     return await db.delete('the_100_items', where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- Tour Operations ---
+  Future<List<TourData>> getAllTours() async {
+    final db = await instance.database;
+    final result = await db.query('tours');
+    return result.map((json) => TourData.fromMap(json)).toList();
+  }
+
   Future<List<TourData>> getToursByContinent(String continent) async {
     final db = await instance.database;
     final result = await db.query('tours', where: 'continent = ?', whereArgs: [continent]);
-    return result.map((json) {
-      var tour = TourData(
-        id: json['id'] as int?, name: json['name'] as String? ?? '', provider: json['provider'] as String? ?? '',
-        duration: json['duration'] as String? ?? '', price: json['price'] as String? ?? '',
-        oldPrice: json['oldPrice'] as String? ?? '', continent: json['continent'] as String? ?? '',
-        views: json['views'] as String? ?? '', startingEnding: json['startingEnding'] as String? ?? '',
-        country: json['country'] as String? ?? '', visiting: json['visiting'] as String? ?? '',
-        tourOperator: json['tourOperator'] as String? ?? '', tourCode: json['tourCode'] as String? ?? '',
-        guideType: json['guideType'] as String? ?? '', groupSize: json['groupSize'] as String? ?? '',
-        physicalRating: json['physicalRating'] as String? ?? '', ageRange: json['ageRange'] as String? ?? '',
-        tourOperatedIn: json['tourOperatedIn'] as String? ?? '', tripStyle: json['tripStyle'] as String? ?? '',
-        overview: json['overview'] as String? ?? '', mapImageUrl: json['mapImageUrl'] as String? ?? '',
-      );
-      tour.images = [json['mainImageUrl'] as String? ?? 'assets/img.png'];
-      return tour;
-    }).toList();
+    return result.map((json) => TourData.fromMap(json)).toList();
+  }
+
+  Future<List<TourData>> searchTours(String query) async {
+    final db = await instance.database;
+    final result = await db.query('tours', where: 'name LIKE ? OR visiting LIKE ?', whereArgs: ['%$query%', '%$query%']);
+    return result.map((json) => TourData.fromMap(json)).toList();
   }
 
   Future<TourData> getFullTourDetails(int tourId) async {
     final db = await instance.database;
     final tourResult = await db.query('tours', where: 'id = ?', whereArgs: [tourId]);
     if (tourResult.isEmpty) throw Exception('Tour not found');
-    var json = tourResult.first;
-    TourData tour = TourData(
-      id: json['id'] as int?, name: json['name'] as String? ?? '', provider: json['provider'] as String? ?? '',
-      duration: json['duration'] as String? ?? '', price: json['price'] as String? ?? '',
-      oldPrice: json['oldPrice'] as String? ?? '', continent: json['continent'] as String? ?? '',
-      views: json['views'] as String? ?? '', startingEnding: json['startingEnding'] as String? ?? '',
-      country: json['country'] as String? ?? '', visiting: json['visiting'] as String? ?? '',
-      tourOperator: json['tourOperator'] as String? ?? '', tourCode: json['tourCode'] as String? ?? '',
-      guideType: json['guideType'] as String? ?? '', groupSize: json['groupSize'] as String? ?? '',
-      physicalRating: json['physicalRating'] as String? ?? '', ageRange: json['ageRange'] as String? ?? '',
-      tourOperatedIn: json['tourOperatedIn'] as String? ?? '', tripStyle: json['tripStyle'] as String? ?? '',
-      overview: json['overview'] as String? ?? '', mapImageUrl: json['mapImageUrl'] as String? ?? '',
-    );
+    var tour = TourData.fromMap(tourResult.first);
+
     final imagesResult = await db.query('tour_images', where: 'tourId = ?', whereArgs: [tourId]);
     tour.images = imagesResult.map((e) => e['imageUrl'] as String).toList();
-    if (tour.images.isEmpty) tour.images = [json['mainImageUrl'] as String? ?? 'assets/img.png'];
+    if (tour.images.isEmpty) tour.images = [tour.mainImageUrl];
+
     final featuresResult = await db.query('tour_features', where: 'tourId = ?', whereArgs: [tourId]);
+    tour.highlights = []; tour.included = []; tour.notIncluded = [];
     for (var f in featuresResult) {
-      var feature = TourFeature(title: f['title'] as String, description: f['description'] as String?, type: f['type'] as String);
+      var feature = TourFeature(id: f['id'] as int?, tourId: f['tourId'] as int?, title: f['title'] as String, description: f['description'] as String?, type: f['type'] as String);
       if (feature.type == 'highlight') tour.highlights.add(feature);
       else if (feature.type == 'included') tour.included.add(feature);
       else if (feature.type == 'notIncluded') tour.notIncluded.add(feature);
     }
     final itinResult = await db.query('tour_itinerary', where: 'tourId = ?', whereArgs: [tourId]);
-    tour.itinerary = itinResult.map((e) => TourItinerary(dayTitle: e['dayTitle'] as String, description: e['description'] as String, location: e['location'] as String, accommodation: e['accommodation'] as String)).toList();
+    tour.itinerary = itinResult.map((e) => TourItinerary(id: e['id'] as int?, tourId: e['tourId'] as int?, dayTitle: e['dayTitle'] as String, description: e['description'] as String, location: e['location'] as String, accommodation: e['accommodation'] as String)).toList();
     return tour;
+  }
+
+  Future<int> insertTour(TourData tour) async {
+    final db = await instance.database;
+    return await db.insert('tours', tour.toMap());
+  }
+
+  Future<int> updateTour(TourData tour) async {
+    final db = await instance.database;
+    return await db.update('tours', tour.toMap(), where: 'id = ?', whereArgs: [tour.id]);
+  }
+
+  Future<int> deleteTour(int id) async {
+    final db = await instance.database;
+    return await db.delete('tours', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> insertTourFeature(TourFeature feature) async {
+    final db = await instance.database;
+    return await db.insert('tour_features', feature.toMap());
+  }
+
+  Future<int> insertTourItinerary(TourItinerary itinerary) async {
+    final db = await instance.database;
+    return await db.insert('tour_itinerary', itinerary.toMap());
+  }
+
+  Future<int> insertTourImage(int tourId, String imageUrl) async {
+    final db = await instance.database;
+    return await db.insert('tour_images', {'tourId': tourId, 'imageUrl': imageUrl});
+  }
+
+  Future<void> deleteTourImages(int tourId) async {
+    final db = await instance.database;
+    await db.delete('tour_images', where: 'tourId = ?', whereArgs: [tourId]);
+  }
+
+  Future<int> insertReview(int tourId, String userName, double rating, String comment) async {
+    final db = await instance.database;
+    return await db.insert('tour_reviews', {
+      'tourId': tourId, 'userName': userName, 'rating': rating, 'comment': comment,
+      'date': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getReviewsByTourId(int tourId) async {
+    final db = await instance.database;
+    return await db.query('tour_reviews', where: 'tourId = ?', whereArgs: [tourId], orderBy: 'date DESC');
   }
 }

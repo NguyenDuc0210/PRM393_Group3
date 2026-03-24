@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../notifiers/navigation_notifier.dart';
+import '../notifiers/auth_notifier.dart';
+import '../repositories/auth_repository.dart';
+import '../models/user_role.dart';
 import 'login_screen.dart';
 import 'settings_screen.dart';
 import '../models/location.dart';
@@ -35,11 +38,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _authToken = prefs.getString('auth_token');
       _currentUser = FirebaseAuth.instance.currentUser;
     });
+    ref.read(authNotifierProvider.notifier).refreshRole();
   }
 
   @override
   Widget build(BuildContext context) {
     final locationsAsyncValue = ref.watch(locationNotifierProvider);
+    final userRole = ref.watch(authNotifierProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -53,14 +58,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               padding: const EdgeInsets.only(right: 12.0),
               child: GestureDetector(
                 onTap: () {
-                  ref.read(navigationIndexProvider.notifier).state = 4;
+                  ref.read(navigationIndexProvider.notifier).state = 5;
                 },
                 child: CircleAvatar(
                   radius: 18,
                   backgroundColor: Colors.white,
-                  backgroundImage: _currentUser?.photoURL != null
-                      ? NetworkImage(_currentUser!.photoURL!)
-                      : const NetworkImage('https://cdn-icons-png.flaticon.com/512/3135/3135715.png'),
+                  child: ClipOval(
+                    child: _currentUser?.photoURL != null
+                        ? Image.network(
+                            _currentUser!.photoURL!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => const Icon(Icons.person, color: Colors.green),
+                          )
+                        : const Icon(Icons.person, color: Colors.green),
+                  ),
                 ),
               ),
             )
@@ -100,21 +111,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.green,
-        onPressed: () {
-          showDialog(
-            context: context,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                title: const Text('Add New Location'),
-                content: const AddEditLocationForm(),
+      floatingActionButton: userRole == UserRole.admin 
+        ? FloatingActionButton(
+            heroTag: 'home_fab',
+            backgroundColor: Colors.green,
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (BuildContext context) {
+                  return AlertDialog(
+                    title: const Text('Add New Location'),
+                    content: const AddEditLocationForm(),
+                  );
+                },
               );
             },
-          );
-        },
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
+            child: const Icon(Icons.add, color: Colors.white),
+          )
+        : null,
     );
   }
 }

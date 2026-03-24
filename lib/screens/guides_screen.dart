@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../notifiers/location_notifier.dart';
 import '../notifiers/navigation_notifier.dart';
 import '../notifiers/plan_notifier.dart';
+import '../notifiers/auth_notifier.dart';
 import '../models/location.dart';
-import '../repositories/database_helper.dart';
+import '../models/user_role.dart';
 import 'guide_detail_screen.dart';
 import 'the_100_screen.dart';
 import 'location_page.dart';
+import '../widgets/add_edit_location_form.dart';
 
 class GuidesScreen extends ConsumerStatefulWidget {
   const GuidesScreen({super.key});
@@ -29,7 +31,7 @@ class _GuidesScreenState extends ConsumerState<GuidesScreen> {
 
   void _showAddToPlanBottomSheet(Location location) async {
     final plans = await ref.read(planNotifierProvider.future);
-    
+
     if (!mounted) return;
 
     showModalBottomSheet(
@@ -106,6 +108,21 @@ class _GuidesScreenState extends ConsumerState<GuidesScreen> {
     );
   }
 
+  void _showAddGuideDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Thêm guide mới'),
+        content: const SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: AddEditLocationForm(),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showCreatePlanDialog(Location location) {
     Navigator.pop(context);
     showModalBottomSheet(
@@ -141,7 +158,7 @@ class _GuidesScreenState extends ConsumerState<GuidesScreen> {
                     final plans = await ref.read(planNotifierProvider.future);
                     final newPlan = plans.first;
                     await ref.read(planNotifierProvider.notifier).addLocationToPlan(newPlan.id, location.id);
-                    
+
                     _newPlanController.clear();
                     if (mounted) {
                       Navigator.pop(context);
@@ -167,9 +184,19 @@ class _GuidesScreenState extends ConsumerState<GuidesScreen> {
   @override
   Widget build(BuildContext context) {
     final locationsAsync = ref.watch(allLocationsProvider);
+    final userRole = ref.watch(authNotifierProvider);
 
     return Scaffold(
       backgroundColor: Colors.white,
+      floatingActionButton: userRole == UserRole.admin 
+        ? FloatingActionButton.extended(
+            heroTag: 'guides_fab',
+            onPressed: _showAddGuideDialog,
+            backgroundColor: const Color(0xFF0D2D44),
+            icon: const Icon(Icons.add, color: Colors.white),
+            label: const Text('Thêm guide', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+          )
+        : null,
       body: Stack(
         children: [
           locationsAsync.when(
@@ -247,10 +274,10 @@ class _GuidesScreenState extends ConsumerState<GuidesScreen> {
       onTap: () async {
         final locations = await ref.read(allLocationsProvider.future);
         final city = locations.firstWhere(
-          (l) => l.continent.toLowerCase() == continentId && l.type == 'city',
+              (l) => l.continent.toLowerCase() == continentId && l.type == 'city',
           orElse: () => locations.firstWhere((l) => l.continent.toLowerCase() == continentId, orElse: () => locations.first),
         );
-        
+
         setState(() => _isSearching = false);
         Navigator.push(context, MaterialPageRoute(builder: (context) => LocationPage(locationId: city.id, cityName: city.name)));
       },
@@ -286,14 +313,12 @@ class _GuidesScreenState extends ConsumerState<GuidesScreen> {
   }
 
   Widget _buildContent(BuildContext context, List<Location> locations) {
-    // Lấy bài đầu tiên của mỗi category từ mỗi thành phố
     List<Location> getFirstOfCategory(String type) {
       final List<Location> filtered = [];
       final Set<String> seenCities = {};
-      
+
       for (var loc in locations) {
         if (loc.type == type) {
-          // Trích xuất tên thành phố từ địa chỉ (giả định định dạng "City, Country")
           final cityName = loc.address.split(',').first.trim();
           if (!seenCities.contains(cityName)) {
             filtered.add(loc);
@@ -373,10 +398,10 @@ class _GuidesScreenState extends ConsumerState<GuidesScreen> {
           delegate: SliverChildListDelegate([
             _buildSectionTitle('Food & Drink'),
             _buildHorizontalList(context, foodLocations, 'Food & Drink'),
-            
+
             _buildSectionTitle('Guides & Tips'),
             _buildHorizontalList(context, guidesLocations, 'Guides & Tips'),
-            
+
             _buildSectionTitle('Culture'),
             _buildHorizontalList(context, cultureLocations, 'Culture'),
           ]),
@@ -471,7 +496,7 @@ class _GuidesScreenState extends ConsumerState<GuidesScreen> {
 
   Widget _buildHorizontalList(BuildContext context, List<Location> items, String categoryLabel) {
     if (items.isEmpty) return const SizedBox.shrink();
-    
+
     return SizedBox(
       height: 340,
       child: ListView.builder(
@@ -514,8 +539,8 @@ class _GuidesScreenState extends ConsumerState<GuidesScreen> {
                                   backgroundColor: Colors.white,
                                   radius: 18,
                                   child: Icon(
-                                    isInPlan ? Icons.bookmark : Icons.bookmark_border, 
-                                    size: 20, 
+                                    isInPlan ? Icons.bookmark : Icons.bookmark_border,
+                                    size: 20,
                                     color: isInPlan ? Colors.black : Colors.grey[800],
                                   ),
                                 ),

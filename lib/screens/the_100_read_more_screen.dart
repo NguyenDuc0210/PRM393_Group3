@@ -1,13 +1,19 @@
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../notifiers/download_notifier.dart';
 
-class The100ReadMoreScreen extends StatelessWidget {
+class The100ReadMoreScreen extends ConsumerWidget {
   final Map<String, dynamic> item;
 
   const The100ReadMoreScreen({super.key, required this.item});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final downloadState = ref.watch(downloadProvider);
+    final isDownloading = downloadState.downloadingIds.contains(item['id']);
+    final isDownloaded = downloadState.downloadedArticles.any((a) => a['articleId'] == item['id']);
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: CustomScrollView(
@@ -22,6 +28,38 @@ class The100ReadMoreScreen extends StatelessWidget {
               ),
               onPressed: () => Navigator.pop(context),
             ),
+            actions: [
+              if (isDownloading)
+                const Padding(
+                  padding: EdgeInsets.all(12.0),
+                  child: SizedBox(
+                    width: 24, height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue),
+                  ),
+                )
+              else if (isDownloaded)
+                const Padding(
+                  padding: EdgeInsets.all(12.0),
+                  child: Icon(Icons.download_done, color: Colors.green, size: 28),
+                )
+              else
+                IconButton(
+                  icon: const CircleAvatar(
+                    backgroundColor: Colors.white,
+                    child: Icon(Icons.download, color: Colors.black),
+                  ),
+                  onPressed: () => ref.read(downloadProvider.notifier).downloadArticle(item),
+                ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const CircleAvatar(
+                  backgroundColor: Colors.white,
+                  child: Icon(Icons.bookmark_border, color: Colors.black),
+                ),
+                onPressed: () {},
+              ),
+              const SizedBox(width: 12),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Image.asset(
                 item['imageUrl'],
@@ -35,6 +73,23 @@ class The100ReadMoreScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (isDownloaded)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.green[50],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.offline_pin, color: Colors.green, size: 16),
+                          SizedBox(width: 6),
+                          Text('Available Offline', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+                        ],
+                      ),
+                    ),
                   Text(
                     item['name'],
                     style: const TextStyle(
@@ -54,7 +109,6 @@ class The100ReadMoreScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 40),
                   
-                  // Khung cuối trang chứa ảnh và tên như yêu cầu
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),

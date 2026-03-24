@@ -6,6 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../repositories/auth_repository.dart';
 import '../main.dart'; 
 import '../notifiers/navigation_notifier.dart';
+import '../notifiers/auth_notifier.dart';
+import '../notifiers/plan_notifier.dart';
+import '../notifiers/download_notifier.dart';
 import 'register_screen.dart';
 import 'main_screen.dart';
 import 'forgot_password_screen.dart';
@@ -27,15 +30,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _showNotification() async {
     try {
       const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        'login_id', 'Login channel',
-        importance: Importance.max, priority: Priority.high,
+        'login_channel_id', 
+        'Login Notifications',
+        channelDescription: 'Thông báo khi đăng nhập thành công',
+        importance: Importance.max,
+        priority: Priority.high,
+        showWhen: true,
       );
       const NotificationDetails details = NotificationDetails(android: androidDetails);
       await flutterLocalNotificationsPlugin.show(
-        0, 'Đăng nhập thành công', 'Chào mừng bạn đến với Travel App!', details,
+        0, 
+        'Đăng nhập thành công! 🎉', 
+        'Chào mừng bạn trở lại với Culture Trip App.', 
+        details,
       );
     } catch (e) {
-      debugPrint('Notification error: $e');
+      debugPrint('Notification error detail: $e');
     }
   }
 
@@ -67,16 +77,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
 
+        // Reset providers so they load data for the new user
+        ref.invalidate(planNotifierProvider);
+        ref.invalidate(downloadProvider);
+        
+        // Update auth state
+        await ref.read(authNotifierProvider.notifier).refreshRole();
+
         if (mounted) {
           _showStatus('Đăng nhập thành công!', Colors.green);
           setState(() => _isLoading = false);
+          
+          _showNotification();
+
           ref.read(navigationIndexProvider.notifier).state = 0;
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (context) => const MainScreen()),
             (route) => false,
           );
-          _showNotification();
         }
       } else {
         setState(() => _isLoading = false);
@@ -138,9 +157,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 12),
                     _buildButton('TIẾP TỤC VỚI GOOGLE', Colors.white, () => _handleLogin('GOOGLE'), small: true),
                     const SizedBox(height: 12),
-                    _buildButton('TIẾP TỤC KHÔNG ĐĂNG NHẬP', Colors.white10, () {
+                    _buildButton('TIẾP TỤC KHÔNG ĐĂNG NHẬP', Colors.white10, () async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.remove('auth_token');
+                      
+                      // Invalidate data
+                      ref.invalidate(planNotifierProvider);
+                      ref.invalidate(downloadProvider);
+                      
+                      await ref.read(authNotifierProvider.notifier).refreshRole();
                       ref.read(navigationIndexProvider.notifier).state = 0;
-                      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const MainScreen()), (route) => false);
+                      if (context.mounted) {
+                        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const MainScreen()), (route) => false);
+                      }
                     }, small: true),
                   ],
                   const SizedBox(height: 32),

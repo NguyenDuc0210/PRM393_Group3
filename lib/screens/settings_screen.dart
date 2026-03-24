@@ -6,7 +6,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../repositories/auth_repository.dart';
 import '../notifiers/navigation_notifier.dart';
 import '../notifiers/settings_notifier.dart';
+import '../notifiers/plan_notifier.dart';
+import '../notifiers/download_notifier.dart';
 import 'login_screen.dart';
+import 'downloaded_articles_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -57,6 +60,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await authRepo.signOut();
       await prefs.remove('auth_token');
       
+      ref.invalidate(planNotifierProvider);
+      ref.invalidate(downloadProvider);
+      
       if (mounted) {
         ref.read(navigationIndexProvider.notifier).state = 0;
         Navigator.pushAndRemoveUntil(
@@ -73,6 +79,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final User? user = FirebaseAuth.instance.currentUser;
+    final downloadState = ref.watch(downloadProvider);
+    final settings = ref.watch(settingsProvider);
+    final isVi = settings.locale.languageCode == 'vi';
+
+    // Dictionary
+    final Map<String, String> texts = {
+      'profile': isVi ? 'Hồ sơ' : 'Profile',
+      'account': isVi ? 'Tài khoản' : 'Account',
+      'settings': isVi ? 'Cài đặt' : 'Settings',
+      'downloads': isVi ? 'Bài viết đã tải' : 'Downloaded Articles',
+      'saved': isVi ? 'bài viết đã lưu' : 'articles saved',
+      'rate': isVi ? 'Đánh giá ứng dụng' : 'Rate Our App',
+      'logout': isVi ? 'Đăng xuất' : 'Logout',
+      'welcome_guest': isVi ? 'Chào mừng bạn đến với\nCulture Trip!' : 'Welcome to The\nCulture Trip!',
+      'welcome_user': isVi ? 'Chào, ${user?.displayName ?? 'Người khám phá'}!' : 'Hello, ${user?.displayName ?? 'Explorer'}!',
+      'desc_user': isVi 
+          ? 'Bạn đã là một phần của cộng đồng. Hãy bắt đầu lên kế hoạch cho chuyến đi tiếp theo!' 
+          : 'You are now part of our community. Start planning your next journey!',
+      'desc_guest': isVi
+          ? 'Đăng nhập để mở khóa khả năng tạo kế hoạch du lịch, khám phá các bài hướng dẫn và nhiều hơn thế nữa!'
+          : 'Log in to unlock the ability to create travel plans, explore local guide articles, and so much more!',
+      'login': isVi ? 'Đăng nhập' : 'Log In',
+      'signup': isVi ? 'Đăng ký' : 'Sign Up',
+      'dark_mode': isVi ? 'Chế độ tối' : 'Dark Mode',
+      'language': isVi ? 'Ngôn ngữ' : 'Language',
+    };
 
     return Scaffold(
       backgroundColor: Theme.of(context).brightness == Brightness.dark 
@@ -80,7 +112,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           : const Color(0xFFC8F2C2),
       body: Column(
         children: [
-          _buildHeader(context, user),
+          _buildHeader(context, user, texts),
           Expanded(
             child: Container(
               width: double.infinity,
@@ -99,49 +131,55 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: ListView(
                   padding: const EdgeInsets.symmetric(vertical: 24),
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                       child: Text(
-                        'Profile',
-                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                        texts['profile']!,
+                        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(height: 16),
                     
-                    _buildMenuItem(Icons.person_outline, 'Account', subtitle: user?.email),
-                    _buildMenuItem(Icons.settings_outlined, 'Settings', 
+                    _buildMenuItem(Icons.person_outline, texts['account']!, subtitle: user?.email),
+                    _buildMenuItem(Icons.settings_outlined, texts['settings']!, 
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                      onTap: () => _showSettingsOptions(context),
+                      onTap: () => _showSettingsOptions(context, texts),
                     ),
-                    _buildMenuItem(Icons.file_download_outlined, 'Downloaded Articles', isEnabled: false),
+                    _buildMenuItem(
+                      Icons.file_download_outlined, 
+                      texts['downloads']!, 
+                      subtitle: '${downloadState.downloadedArticles.length} ${texts['saved']}',
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DownloadedArticlesScreen())),
+                    ),
                     
                     _buildMenuItem(
                       _isRated ? Icons.star : Icons.star_outline, 
-                      'Rate Our App',
+                      texts['rate']!,
                       trailing: _isRated ? const Icon(Icons.star, color: Colors.amber) : null,
                       onTap: _toggleRate,
                     ),
 
-                    if (user != null && _authToken != null) ...[
+                    if (user != null) ...[
                       const Divider(indent: 24, endIndent: 24, height: 32),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Auth Token:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                            const SizedBox(height: 4),
-                            SelectableText(
-                              _authToken!,
-                              style: const TextStyle(fontSize: 12, color: Colors.blueGrey, fontStyle: FontStyle.italic),
-                            ),
-                          ],
+                      if (_authToken != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Auth Token:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                              const SizedBox(height: 4),
+                              SelectableText(
+                                _authToken!,
+                                style: const TextStyle(fontSize: 12, color: Colors.blueGrey, fontStyle: FontStyle.italic),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
                       const SizedBox(height: 16),
                       ListTile(
                         leading: const Icon(Icons.logout, color: Colors.red),
-                        title: const Text('Logout', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                        title: Text(texts['logout']!, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                         onTap: () => _handleLogout(context),
                       ),
                     ],
@@ -156,7 +194,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, User? user) {
+  Widget _buildHeader(BuildContext context, User? user, Map<String, String> texts) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 60, 24, 30),
       child: Column(
@@ -176,9 +214,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      user != null 
-                        ? 'Hello, ${user.displayName ?? 'Explorer'}!' 
-                        : 'Welcome to The\nCulture Trip!',
+                      user != null ? texts['welcome_user']! : texts['welcome_guest']!,
                       style: TextStyle(
                         fontSize: 22, 
                         fontWeight: FontWeight.bold, 
@@ -188,9 +224,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      user != null
-                        ? 'You are now part of our community. Start planning your next journey!'
-                        : 'Log in to unlock the ability to create travel plans, explore local guide articles, and so much more!',
+                      user != null ? texts['desc_user']! : texts['desc_guest']!,
                       style: TextStyle(
                         fontSize: 13, 
                         color: Theme.of(context).brightness == Brightness.dark ? Colors.white70 : Colors.black87
@@ -214,7 +248,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                    child: const Text('Log In', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: Text(texts['login']!, style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -228,7 +262,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                    child: const Text('Sign Up', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: Text(texts['signup']!, style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -262,7 +296,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showSettingsOptions(BuildContext context) {
+  void _showSettingsOptions(BuildContext context, Map<String, String> texts) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -275,10 +309,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Settings', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text(texts['settings']!, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
                   SwitchListTile(
-                    title: const Text('Dark Mode'),
+                    title: Text(texts['dark_mode']!),
                     secondary: const Icon(Icons.brightness_4),
                     value: settings.themeMode == ThemeMode.dark,
                     onChanged: (val) {
@@ -286,7 +320,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     },
                   ),
                   ListTile(
-                    title: const Text('Language'),
+                    title: Text(texts['language']!),
                     leading: const Icon(Icons.language),
                     trailing: Text(
                       settings.locale.languageCode == 'en' ? 'English' : 'Tiếng Việt', 

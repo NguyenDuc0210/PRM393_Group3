@@ -2,8 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../notifiers/navigation_notifier.dart';
-import 'home_screen.dart';
-import 'explore_screen.dart';
 import 'settings_screen.dart';
 import 'guides_screen.dart';
 import 'tours_screen.dart';
@@ -12,9 +10,12 @@ import 'my_plans_screen.dart';
 class MainScreen extends ConsumerWidget {
   const MainScreen({super.key});
 
+  // Đã xóa HomeScreen và ExploreScreen
+  // Index 0: GuidesScreen
+  // Index 1: ToursScreen
+  // Index 2: MyPlansScreen
+  // Index 3: Profile (SettingsScreen)
   static const List<Widget> _widgetOptions = <Widget>[
-    HomeScreen(),
-    ExploreScreen(),
     GuidesScreen(),
     ToursScreen(),
     MyPlansScreen(),
@@ -38,16 +39,6 @@ class MainScreen extends ConsumerWidget {
         },
         indicatorColor: const Color(0xFFC8F2C2),
         destinations: const <NavigationDestination>[
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.explore_outlined),
-            selectedIcon: Icon(Icons.explore),
-            label: 'Explore',
-          ),
           NavigationDestination(
             icon: Icon(Icons.map_outlined),
             selectedIcon: Icon(Icons.map),

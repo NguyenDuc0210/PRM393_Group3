@@ -4,8 +4,6 @@ class TourData {
   final String name;
   final String provider;
   final String duration;
-  final String price;
-  final String oldPrice;
   final String continent;
   final String views;
   final String startingEnding;
@@ -21,8 +19,9 @@ class TourData {
   final String tripStyle;
   final String overview;
   final String mapImageUrl;
-  
-  // These will be fetched from related tables
+  final String mainImageUrl;
+  final String price;
+
   List<String> images = [];
   List<TourFeature> highlights = [];
   List<TourFeature> included = [];
@@ -34,8 +33,6 @@ class TourData {
     required this.name,
     required this.provider,
     required this.duration,
-    required this.price,
-    required this.oldPrice,
     required this.continent,
     required this.views,
     required this.startingEnding,
@@ -51,6 +48,8 @@ class TourData {
     required this.tripStyle,
     required this.overview,
     required this.mapImageUrl,
+    required this.mainImageUrl,
+    required this.price,
   });
 
   Map<String, dynamic> toMap() {
@@ -59,8 +58,6 @@ class TourData {
       'name': name,
       'provider': provider,
       'duration': duration,
-      'price': price,
-      'oldPrice': oldPrice,
       'continent': continent,
       'views': views,
       'startingEnding': startingEnding,
@@ -76,28 +73,131 @@ class TourData {
       'tripStyle': tripStyle,
       'overview': overview,
       'mapImageUrl': mapImageUrl,
+      'mainImageUrl': mainImageUrl,
+      'price': price,
     };
+  }
+
+  factory TourData.fromMap(Map<String, dynamic> map) {
+    return TourData(
+      id: map['id'] as int?,
+      name: map['name'] as String? ?? '',
+      provider: map['provider'] as String? ?? '',
+      duration: map['duration'] as String? ?? '',
+      continent: map['continent'] as String? ?? '',
+      views: map['views'] as String? ?? '',
+      startingEnding: map['startingEnding'] as String? ?? '',
+      country: map['country'] as String? ?? '',
+      visiting: map['visiting'] as String? ?? '',
+      tourOperator: map['tourOperator'] as String? ?? '',
+      tourCode: map['tourCode'] as String? ?? '',
+      guideType: map['guideType'] as String? ?? '',
+      groupSize: map['groupSize'] as String? ?? '',
+      physicalRating: map['physicalRating'] as String? ?? '',
+      ageRange: map['ageRange'] as String? ?? '',
+      tourOperatedIn: map['tourOperatedIn'] as String? ?? '',
+      tripStyle: map['tripStyle'] as String? ?? '',
+      overview: map['overview'] as String? ?? '',
+      mapImageUrl: map['mapImageUrl'] as String? ?? '',
+      mainImageUrl: map['mainImageUrl'] as String? ?? 'assets/img.png',
+      price: map['price'] as String? ?? 'From \$0', // Đã thêm \ để fix lỗi syntax
+    );
+  }
+
+  TourData copyWith({
+    int? id,
+    String? name,
+    String? provider,
+    String? duration,
+    String? continent,
+    String? views,
+    String? startingEnding,
+    String? country,
+    String? visiting,
+    String? tourOperator,
+    String? tourCode,
+    String? guideType,
+    String? groupSize,
+    String? physicalRating,
+    String? ageRange,
+    String? tourOperatedIn,
+    String? tripStyle,
+    String? overview,
+    String? mapImageUrl,
+    String? mainImageUrl,
+    String? price,
+  }) {
+    return TourData(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      provider: provider ?? this.provider,
+      duration: duration ?? this.duration,
+      continent: continent ?? this.continent,
+      views: views ?? this.views,
+      startingEnding: startingEnding ?? this.startingEnding,
+      country: country ?? this.country,
+      visiting: visiting ?? this.visiting,
+      tourOperator: tourOperator ?? this.tourOperator,
+      tourCode: tourCode ?? this.tourCode,
+      guideType: guideType ?? this.guideType,
+      groupSize: groupSize ?? this.groupSize,
+      physicalRating: physicalRating ?? this.physicalRating,
+      ageRange: ageRange ?? this.ageRange,
+      tourOperatedIn: tourOperatedIn ?? this.tourOperatedIn,
+      tripStyle: tripStyle ?? this.tripStyle,
+      overview: overview ?? this.overview,
+      mapImageUrl: mapImageUrl ?? this.mapImageUrl,
+      mainImageUrl: mainImageUrl ?? this.mainImageUrl,
+      price: price ?? this.price,
+    );
   }
 }
 
 class TourFeature {
+  final int? id;
+  final int? tourId;
   final String title;
   final String? description;
-  final String type; // 'highlight', 'included', 'notIncluded'
+  final String type;
 
-  TourFeature({required this.title, this.description, required this.type});
+  TourFeature({this.id, this.tourId, required this.title, this.description, required this.type});
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'tourId': tourId,
+      'title': title,
+      'description': description,
+      'type': type,
+    };
+  }
 }
 
 class TourItinerary {
+  final int? id;
+  final int? tourId;
   final String dayTitle;
   final String description;
   final String location;
   final String accommodation;
 
   TourItinerary({
+    this.id,
+    this.tourId,
     required this.dayTitle,
     required this.description,
     required this.location,
     required this.accommodation,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'tourId': tourId,
+      'dayTitle': dayTitle,
+      'description': description,
+      'location': location,
+      'accommodation': accommodation,
+    };
+  }
 }

@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../repositories/plan_repository.dart';
 import '../notifiers/plan_notifier.dart';
+import '../notifiers/auth_notifier.dart';
+import '../repositories/auth_repository.dart';
+import '../models/user_role.dart';
 import 'plan_detail_screen.dart';
+import 'login_screen.dart';
 
 class MyPlansScreen extends ConsumerStatefulWidget {
   const MyPlansScreen({super.key});
@@ -112,6 +116,31 @@ class _MyPlansScreenState extends ConsumerState<MyPlansScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final userRole = ref.watch(authNotifierProvider);
+    
+    if (userRole == UserRole.guest) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFC8F2C2),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.lock_outline, size: 80, color: Color(0xFF0D2D44)),
+              const SizedBox(height: 20),
+              const Text('Vui lòng đăng nhập để xem kế hoạch', 
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0D2D44))),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen())),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D2D44)),
+                child: const Text('Đăng nhập ngay', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final plansAsync = ref.watch(planNotifierProvider);
 
     return Scaffold(

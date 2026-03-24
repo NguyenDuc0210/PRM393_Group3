@@ -2,6 +2,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../models/user_role.dart';
 
 class AuthRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -17,6 +18,19 @@ class AuthRepository {
         accessToken: googleAuth.accessToken, idToken: googleAuth.idToken,
       );
       final UserCredential userCredential = await _auth.signInWithCredential(credential);
+      
+      // Check if user exists in Firestore, if not create as customer
+      final userDoc = await _db.collection('users').doc(userCredential.user!.uid).get();
+      if (!userDoc.exists) {
+        await _db.collection('users').doc(userCredential.user!.uid).set({
+          'uid': userCredential.user!.uid,
+          'email': userCredential.user!.email,
+          'name': userCredential.user!.displayName ?? 'User',
+          'role': 'customer',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+      
       return userCredential.user;
     } catch (e) {
       rethrow;
@@ -38,13 +52,34 @@ class AuthRepository {
       User? user = result.user;
       if (user != null) {
         await _db.collection('users').doc(user.uid).set({
-          'uid': user.uid, 'email': email, 'name': name, 'createdAt': FieldValue.serverTimestamp(),
+          'uid': user.uid,
+          'email': email,
+          'name': name,
+          'role': 'customer', // Default role
+          'createdAt': FieldValue.serverTimestamp(),
         });
       }
       return user;
     } catch (e) {
       throw Exception(_getAuthErrorMessage(e));
     }
+  }
+
+  Future<UserRole> getUserRole() async {
+    final user = _auth.currentUser;
+    if (user == null) return UserRole.guest;
+
+    try {
+      final doc = await _db.collection('users').doc(user.uid).get();
+      if (doc.exists) {
+        final role = doc.data()?['role'] as String?;
+        if (role == 'admin') return UserRole.admin;
+        return UserRole.customer;
+      }
+    } catch (e) {
+      print('Error getting user role: $e');
+    }
+    return UserRole.customer;
   }
 
   Future<void> sendPasswordResetEmail(String email) async {
