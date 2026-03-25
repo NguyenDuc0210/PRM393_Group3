@@ -77,11 +77,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
 
-        // Reset providers so they load data for the new user
         ref.invalidate(planNotifierProvider);
         ref.invalidate(downloadProvider);
-        
-        // Update auth state
+
         await ref.read(authNotifierProvider.notifier).refreshRole();
 
         if (mounted) {
@@ -160,8 +158,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     _buildButton('TIẾP TỤC KHÔNG ĐĂNG NHẬP', Colors.white10, () async {
                       final prefs = await SharedPreferences.getInstance();
                       await prefs.remove('auth_token');
-                      
-                      // Invalidate data
+
                       ref.invalidate(planNotifierProvider);
                       ref.invalidate(downloadProvider);
                       

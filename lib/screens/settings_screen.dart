@@ -10,6 +10,7 @@ import '../notifiers/plan_notifier.dart';
 import '../notifiers/download_notifier.dart';
 import 'login_screen.dart';
 import 'downloaded_articles_screen.dart';
+import 'change_password_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -83,7 +84,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final settings = ref.watch(settingsProvider);
     final isVi = settings.locale.languageCode == 'vi';
 
-    // Dictionary
     final Map<String, String> texts = {
       'profile': isVi ? 'Hồ sơ' : 'Profile',
       'account': isVi ? 'Tài khoản' : 'Account',
@@ -92,6 +92,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       'saved': isVi ? 'bài viết đã lưu' : 'articles saved',
       'rate': isVi ? 'Đánh giá ứng dụng' : 'Rate Our App',
       'logout': isVi ? 'Đăng xuất' : 'Logout',
+      'change_pass': isVi ? 'Đổi mật khẩu' : 'Change Password',
       'welcome_guest': isVi ? 'Chào mừng bạn đến với\nCulture Trip!' : 'Welcome to The\nCulture Trip!',
       'welcome_user': isVi ? 'Chào, ${user?.displayName ?? 'Người khám phá'}!' : 'Hello, ${user?.displayName ?? 'Explorer'}!',
       'desc_user': isVi 
@@ -140,7 +141,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                     const SizedBox(height: 16),
                     
-                    _buildMenuItem(Icons.person_outline, texts['account']!, subtitle: user?.email),
+                    _buildMenuItem(Icons.person_outline, texts['account']!, 
+                      subtitle: user?.email,
+                      onTap: user != null ? () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ChangePasswordScreen())) : null,
+                      trailing: user != null ? const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey) : null,
+                    ),
                     _buildMenuItem(Icons.settings_outlined, texts['settings']!, 
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                       onTap: () => _showSettingsOptions(context, texts),

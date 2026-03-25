@@ -19,7 +19,6 @@ class AuthRepository {
       );
       final UserCredential userCredential = await _auth.signInWithCredential(credential);
       
-      // Check if user exists in Firestore, if not create as customer
       final userDoc = await _db.collection('users').doc(userCredential.user!.uid).get();
       if (!userDoc.exists) {
         await _db.collection('users').doc(userCredential.user!.uid).set({
@@ -55,7 +54,7 @@ class AuthRepository {
           'uid': user.uid,
           'email': email,
           'name': name,
-          'role': 'customer', // Default role
+          'role': 'customer', 
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
@@ -86,6 +85,22 @@ class AuthRepository {
     try { await _auth.sendPasswordResetEmail(email: email); } catch (e) { throw Exception(_getAuthErrorMessage(e)); }
   }
 
+  Future<void> changePassword(String currentPassword, String newPassword) async {
+    final user = _auth.currentUser;
+    if (user == null || user.email == null) throw Exception('Người dùng chưa đăng nhập.');
+
+    try {
+      AuthCredential credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(newPassword);
+    } catch (e) {
+      throw Exception(_getAuthErrorMessage(e));
+    }
+  }
+
   Future<void> signOut() async {
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn();
@@ -100,7 +115,9 @@ class AuthRepository {
     if (e is FirebaseAuthException) {
       switch (e.code) {
         case 'user-not-found': return 'Không tìm thấy người dùng.';
-        case 'wrong-password': return 'Mật khẩu không chính xác.';
+        case 'wrong-password': return 'Mật khẩu cũ không chính xác.';
+        case 'weak-password': return 'Mật khẩu mới quá yếu.';
+        case 'requires-recent-login': return 'Vui lòng đăng nhập lại trước khi đổi mật khẩu.';
         default: return e.message ?? 'Đã xảy ra lỗi';
       }
     }

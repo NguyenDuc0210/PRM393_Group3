@@ -9,7 +9,6 @@ class AuthNotifier extends StateNotifier<UserRole> {
   final AuthRepository _authRepo;
 
   AuthNotifier(this._authRepo) : super(UserRole.guest) {
-    // Gọi refreshRole nhưng không await trong constructor để tránh block UI
     refreshRole();
   }
 
